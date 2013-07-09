@@ -106,13 +106,14 @@ extern "C" {
 #define OBEX_MNS_UUID		"00001133-0000-1000-8000-00805f9b34fb"
 #define OBEX_MAP_UUID		"00001134-0000-1000-8000-00805f9b34fb"
 
+typedef enum {
+	BT_UUID_UNSPEC = 0,
+	BT_UUID16 = 16,
+	BT_UUID32 = 32,
+	BT_UUID128 = 128,
+} bt_uuid_type_t;
 typedef struct {
-	enum {
-		BT_UUID_UNSPEC = 0,
-		BT_UUID16 = 16,
-		BT_UUID32 = 32,
-		BT_UUID128 = 128,
-	} type;
+	bt_uuid_type_t type;
 	union {
 		uint16_t  u16;
 		uint32_t  u32;

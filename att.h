@@ -22,6 +22,8 @@
  *
  */
 
+#include "lib/uuid.h"
+
 /* Attribute Protocol Opcodes */
 #define ATT_OP_ERROR			0x01
 #define ATT_OP_MTU_REQ			0x02
@@ -114,25 +116,25 @@ struct att_range {
 /* These functions do byte conversion */
 static inline uint8_t att_get_u8(const void *ptr)
 {
-	const uint8_t *u8_ptr = ptr;
+	const uint8_t *u8_ptr = (const uint8_t *) ptr;
 	return bt_get_unaligned(u8_ptr);
 }
 
 static inline uint16_t att_get_u16(const void *ptr)
 {
-	const uint16_t *u16_ptr = ptr;
+	const uint16_t *u16_ptr = (const uint16_t*) ptr;
 	return btohs(bt_get_unaligned(u16_ptr));
 }
 
 static inline uint32_t att_get_u32(const void *ptr)
 {
-	const uint32_t *u32_ptr = ptr;
+	const uint32_t *u32_ptr = (const uint32_t*) ptr;
 	return btohl(bt_get_unaligned(u32_ptr));
 }
 
 static inline uint128_t att_get_u128(const void *ptr)
 {
-	const uint128_t *u128_ptr = ptr;
+	const uint128_t *u128_ptr =(const uint128_t*)  ptr;
 	uint128_t dst;
 
 	btoh128(u128_ptr, &dst);
@@ -157,7 +159,7 @@ static inline void att_put_u32(uint32_t src, void *dst)
 
 static inline void att_put_u128(uint128_t src, void *dst)
 {
-	uint128_t *d128 = dst;
+	uint128_t *d128 = (uint128_t*)dst;
 
 	htob128(&src, d128);
 }

@@ -2,6 +2,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <cerrno>
+#include <vector>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
@@ -10,7 +11,10 @@
 
 #include <unistd.h>
 #include "logging.h"
-
+#include "lib/uuid.h"
+extern "C"{
+#include "att.h"
+}
 using namespace std;
 
 
@@ -22,7 +26,7 @@ void test_fd_(int fd, int line)
 		exit(1);
 	}
 
-	cerr << "Line " << line << " ok\n";
+	cerr << "Line " << line << " ok = " << fd  << endl;
 
 }
 
@@ -32,6 +36,7 @@ struct BLEDevice
 {
 	bool constructing;
 	int sock;
+	static const int buflen=1024;
 
 	void test_fd_(int fd, int line)
 	{
@@ -50,10 +55,23 @@ struct BLEDevice
 			exit(1);
 		}
 		else
-			LOG(Debug, "System call on " << line << ": " << strerror(errno));
+			LOG(Debug, "System call on " << line << ": " << strerror(errno) << " ret = " << fd);
 	}
 
 	BLEDevice();
+
+	void send_read_characteristic_by_uuid(const bt_uuid_t& uuid, uint16_t start = 0x0001, uint16_t end=0xffff)
+	{
+		vector<uint8_t> buf(buflen);
+		int len = enc_read_by_type_req(start, end, const_cast<bt_uuid_t*>(&uuid), buf.data(), buf.size());
+		int ret = write(sock, buf.data(), len);
+		test(ret);
+		for(int i=0; i < len; i++)
+			printf("%02x ", buf[i]);
+		cout << endl;
+
+
+	}
 
 };
 
@@ -81,7 +99,7 @@ BLEDevice::BLEDevice()
 	//UDP in that they have port numbers and are packet oriented.
 	struct sockaddr_l2 addr;
 		
-	bdaddr_t source_address = {0};  //i.e. the adapter. Note, 0, corresponds to BDADDR_ANY
+	bdaddr_t source_address = {{0,0,0,0,0,0}};  //i.e. the adapter. Note, 0, corresponds to BDADDR_ANY
 	                                //However BDADDR_ANY uses a nonstandard C hack and does not compile
 									//under C++. So, set it manually.
 	//So, a sockaddr_l2 has the family (obviously)
@@ -145,9 +163,35 @@ BLEDevice::BLEDevice()
 
 LogLevels log_level;
 
-int main(int argc, char **argv)
+int main(int , char **)
 {
 	log_level = Trace;
 
 	BLEDevice b;
+	
+	bt_uuid_t uuid;
+	uuid.type = BT_UUID16;
+	uuid.value.u16 = 0x2800;
+
+	b.send_read_characteristic_by_uuid(uuid);
+
+	char buf[1024];
+	int x;
+
+	x = read(b.sock, buf, 1024);
+	test(x);
+
+	for(int i=0; i < x; i++)
+		printf("%02x ", 0xff&buf[i]);
+	cout << endl;
+
+	uuid.value.u16 = 0x2901;
+	b.send_read_characteristic_by_uuid(uuid);
+
+	x = read(b.sock, buf, 1024);
+	test(x);
+
+	for(int i=0; i < x; i++)
+		printf("%02x ", 0xff&buf[i]);
+	cout << endl;
 }
