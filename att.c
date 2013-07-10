@@ -79,6 +79,68 @@ const char *att_ecode2str(uint8_t status)
 		return "Unexpected error code";
 	}
 }
+
+
+const char* att_op2str(uint8_t op)
+{
+	switch(op)
+	{
+		case ATT_OP_ERROR:
+			return "Error";
+		case ATT_OP_MTU_REQ:
+			return "MTU Request";
+		case ATT_OP_MTU_RESP:
+			return "MTU Response";
+		case ATT_OP_FIND_INFO_REQ:
+			return "Find Info Request";
+		case ATT_OP_FIND_INFO_RESP:
+			return "Find Info Response";
+		case ATT_OP_FIND_BY_TYPE_REQ:
+			return "Find By Type Request";
+		case ATT_OP_FIND_BY_TYPE_RESP:
+			return "Find By Type Response";
+		case ATT_OP_READ_BY_TYPE_REQ:
+			return "Read By Type Request";
+		case ATT_OP_READ_BY_TYPE_RESP:
+			return "Read By Type Response";
+		case ATT_OP_READ_REQ:
+			return "Read Request";
+		case ATT_OP_READ_RESP:
+			return "Read Response";
+		case ATT_OP_READ_BLOB_REQ:
+			return "Read Blob Request";
+		case ATT_OP_READ_BLOB_RESP:
+			return "Read Blob Response";
+		case ATT_OP_READ_MULTI_REQ:
+			return "Read Multi Request";
+		case ATT_OP_READ_MULTI_RESP:
+			return "Read Multi Resources";
+		case ATT_OP_READ_BY_GROUP_REQ:
+			return "Read By Group Request";
+		case ATT_OP_READ_BY_GROUP_RESP:
+			return "Read By Group Response";
+		case ATT_OP_WRITE_REQ:
+			return "Read Write Request";
+		case ATT_OP_WRITE_RESP:
+			return "Read Write Response";
+		case ATT_OP_WRITE_CMD:
+			return "Read Write Command";
+		case ATT_OP_PREP_WRITE_REQ:
+		case ATT_OP_PREP_WRITE_RESP:
+		case ATT_OP_EXEC_WRITE_REQ:
+		case ATT_OP_EXEC_WRITE_RESP:
+		case ATT_OP_HANDLE_NOTIFY:
+		case ATT_OP_HANDLE_IND:
+		case ATT_OP_HANDLE_CNF:
+		case ATT_OP_SIGNED_WRITE_CMD:
+			return "haha fill me in :)";
+
+		default:
+			return "Unnkown opcode";
+	};
+}
+
+
 /*
 void att_data_list_free(struct att_data_list *list)
 {

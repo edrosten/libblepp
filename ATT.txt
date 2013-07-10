@@ -1,0 +1,41 @@
+Attribute Protocol
+------------------
+
+The ATT protocol allows you to read data off the bluetooth device.
+
+Attributes are read by handle. Data is arranged as an array indexed by handle,
+or equivalently a function of Handle->Data. Not every element is indexable, so
+it's more like:
+
+read:  Handle -> Data | Null
+
+Each attribute also has Information, which consists of Properties (a set of
+flags), a type (stored as a UUID). Formally:
+
+find_information: [ (Handle, Type) ]
+
+
+Using a combination of find_information and read_attribute, one could create the
+list [ (Handle, Type, Data) ] for all attributes. It is simple to find all
+data elements matching a certain type. To prevent excessive reading, a function
+is provided which reads all data of a given type:
+
+read_by_type: Type -> [(Handle, Data)]
+
+NB: types are generally rather high level things. "string" is not a type,
+"device name" would be a type. I believe that all data elements sharing a type
+must have the same length.
+
+Closely related to read_by_type is the function read_group_by_type. Not only do
+attributes have a type, but an entire group can be of a certain type:
+
+read_group_by_type: Type -> [( Handle, Handle, Type ) ]
+
+The returned value is the first handle in the group, the second is one past the
+last handle, and the Type is the type of that particular element of the group,
+not the type of the group itself.
+
+
+
+The Generic Attribute Profile 
+-----------------------------

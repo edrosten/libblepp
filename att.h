@@ -2,6 +2,7 @@
  *
  *  BlueZ - Bluetooth protocol stack for Linux
  *
+ *  Copyright (C) 2013  Edward Rosten
  *  Copyright (C) 2010  Nokia Corporation
  *  Copyright (C) 2010  Marcel Holtmann <marcel@holtmann.org>
  *
@@ -204,7 +205,7 @@ static inline bt_uuid_t att_get_uuid128(const void *ptr)
 
 struct att_data_list *att_data_list_alloc(uint16_t num, uint16_t len);
 void att_data_list_free(struct att_data_list *list);
-
+const char* att_op2str(uint8_t op);
 const char *att_ecode2str(uint8_t status);
 uint16_t enc_read_by_grp_req(uint16_t start, uint16_t end, bt_uuid_t *uuid,
 						uint8_t *pdu, size_t len);
