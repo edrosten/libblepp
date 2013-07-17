@@ -1,5 +1,15 @@
-Attribute Protocol
-------------------
+Haskell Notation
+----------------
+
+I've used Haskell style notation. Functions, dictionaries and arrays are
+essentially similar in that both map an input to an output, i.e. A -> B.
+Tuples are indicated with "," and "()". Returned lists or arrays with [].
+Alternatives are indicated with |. For arguments, The type is written first, and
+the name (if applicable) follows after a  "." .
+
+
+Attribute Protocol: A high level view
+-------------------------------------
 
 The ATT protocol allows you to read data off the bluetooth device.
 
@@ -10,7 +20,7 @@ it's more like:
 read:  Handle -> Data | Null
 
 Each attribute also has Information, which consists of Properties (a set of
-flags), a type (stored as a UUID). Formally:
+flags), a Type (stored as a UUID). Formally:
 
 find_information: [ (Handle, Type) ]
 
@@ -24,7 +34,7 @@ read_by_type: Type -> [(Handle, Data)]
 
 NB: types are generally rather high level things. "string" is not a type,
 "device name" would be a type. I believe that all data elements sharing a type
-must have the same length.
+must have the same length. A "Type" is more of a name.
 
 Closely related to read_by_type is the function read_group_by_type. Not only do
 attributes have a type, but an entire group can be of a certain type:
@@ -36,6 +46,25 @@ last handle, and the Type is the type of that particular element of the group,
 not the type of the group itself.
 
 
+Actually reading data
+---------------------
+
+In practice each query can only be answered with a very limited amount of data.
+Note that each of the functions above (except read) returns a list of handles.
+In the protocol, each function actually takes a start and end handle as an
+argument which limits which handles will be returned. In order to get a complete
+list of things, one must keep setting the start handle to one plus the last
+handle returned and reissuing the call. When no handles can be returned an error
+message is sent back, indicating that no handles exist in the range.
+
+The read_by_type function is actually more like:
+
+read_by_type: (Type, Handle.first, Handle.last) -> [ (Handle, Data) ] | Error.no_attribute_in_range
+
+
+
 
 The Generic Attribute Profile 
 -----------------------------
+
+

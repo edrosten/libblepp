@@ -6,6 +6,7 @@
 #include <sstream>
 #include <iomanip>
 #include <cassert>
+#include <tuple>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
@@ -20,6 +21,8 @@ extern "C"{
 }
 using namespace std;
 
+#define LE_ATT_CID 4        //Spec 4.0 G.5.2.2
+#define ATT_DEFAULT_MTU 23  //Spec 4.0 G.5.2.1
 
 void test_fd_(int fd, int line)
 {
@@ -58,6 +61,17 @@ string to_str(const uint8_t& u)
 	}
 }
 
+string to_str(const bt_uuid_t& uuid)
+{
+	//8 4 4 4 12
+	if(uuid.type == BT_UUID16)
+		return to_hex(uuid.value.u16);
+	else if(uuid.type == BT_UUID128)
+		return "--128--";
+	else
+		return "uuid.wtf";
+
+}
 
 string to_hex(const uint8_t* d, int l)
 {
@@ -71,6 +85,10 @@ string to_hex(pair<const uint8_t*, int> d)
 	return to_hex(d.first, d.second);
 }
 
+string to_hex(const vector<uint8_t>& v)
+{
+	return to_hex(v.data(), v.size());
+}
 
 string to_str(const uint8_t* d, int l)
 {
@@ -83,6 +101,16 @@ string to_str(pair<const uint8_t*, int> d)
 {
 	return to_str(d.first, d.second);
 }
+string to_str(pair<const uint8_t*, const uint8_t*> d)
+{
+	return to_str(d.first, d.second - d.first);
+}
+
+string to_str(const vector<uint8_t>& v)
+{
+	return to_str(v.data(), v.size());
+}
+
 
 #define test(X) test_fd_(X, __LINE__)
 class ResponsePDU;
@@ -134,7 +162,7 @@ class PDUErrorResponse: public ResponsePDU
 
 		uint8_t request_opcode() const
 		{
-			return uint8(2);
+			return uint8(1);
 		}
 
 		uint16_t handle() const
@@ -163,10 +191,10 @@ class PDUReadByTypeResponse: public ResponsePDU
 			if(type()  != ATT_OP_READ_BY_TYPE_RESP)
 				type_mismatch();
 
-			if((length - 1) % element_size() != 0)
+			if((length - 2) % element_size() != 0)
 			{
 				//Packet length is invalid.
-				//throw 1.;
+				throw 1.;
 			}
 		}
 
@@ -190,9 +218,86 @@ class PDUReadByTypeResponse: public ResponsePDU
 			return uint16(i*element_size() + 2);
 		}
 
-		pair<const uint8_t*, int> value(int i) const
+		pair<const uint8_t*, const uint8_t*> value(int i) const
 		{
-			return make_pair(data + i*element_size() + 4, value_size());
+			const uint8_t* begin = data + i*element_size() + 4;
+			return make_pair(begin, begin + value_size());
+		}
+
+		uint16_t value_uint16(int i) const
+		{
+			assert(value_size() == 2);
+			return uint16(i*element_size()+4);
+		}
+
+};
+
+
+class PDUReadGroupByTypeResponse: public ResponsePDU
+{
+	public:
+		PDUReadGroupByTypeResponse(const ResponsePDU& p_)
+		:ResponsePDU(p_)
+		{
+			if(type()  != ATT_OP_READ_BY_GROUP_RESP)
+				type_mismatch();
+
+			if((length - 2) % element_size() != 0)
+			{
+				//Packet length is invalid.
+				LOG(Error, "Invalid packet length");
+				throw 1.;
+			}
+
+			if(value_size() != 2 && value_size() != 16)
+			{
+				LOG(Error, "Invalid UUID length" << value_size());
+				throw 1.;
+			}
+		}
+
+		int value_size() const
+		{
+			return uint8(1) -4;
+		}
+
+		int element_size() const
+		{
+			return uint8(1);
+		}
+
+		int num_elements() const
+		{
+			return (length - 2) / element_size();
+		}
+		
+		uint16_t start_handle(int i) const
+		{
+			return uint16(i*element_size() + 2);
+		}
+
+		uint16_t end_handle(int i) const
+		{
+			return uint16(i*element_size() + 4);
+		}
+
+		bt_uuid_t uuid(int i) const
+		{
+			const uint8_t* begin = data + i*element_size() + 6;
+
+			bt_uuid_t uuid;
+			if(value_size() == 2)
+			{
+				uuid.type = BT_UUID16;
+				uuid.value.u16 = att_get_u16(begin);
+			}
+			else
+			{
+				uuid.type = BT_UUID128;
+				uuid.value.u128 = att_get_u128(begin);
+			}
+				
+			return uuid;
 		}
 
 		uint16_t value_uint16(int i) const
@@ -213,7 +318,7 @@ void pretty_print(const ResponsePDU& pdu)
 		cerr << "debug: Packet type: " << to_hex(pdu.type()) << " " << att_op2str(pdu.type()) << endl;
 		
 		if(pdu.type() == ATT_OP_ERROR)
-			cerr << "debug: " << PDUErrorResponse(pdu).error_str() << " in response to " <<  att_op2str(PDUErrorResponse(pdu).request_opcode()) << " on handle " + to_hex(PDUErrorResponse(pdu).handle());
+			cerr << "debug: " << PDUErrorResponse(pdu).error_str() << " in response to " <<  att_op2str(PDUErrorResponse(pdu).request_opcode()) << " on handle " + to_hex(PDUErrorResponse(pdu).handle()) << endl;
 		else if(pdu.type() == ATT_OP_READ_BY_TYPE_RESP)
 		{
 			PDUReadByTypeResponse p(pdu);
@@ -231,16 +336,32 @@ void pretty_print(const ResponsePDU& pdu)
 			}
 
 		}
+		else if(pdu.type() == ATT_OP_READ_BY_GROUP_RESP)
+		{
+			PDUReadGroupByTypeResponse p(pdu);
+			cerr << "debug: elements = " << p.num_elements() << endl;
+			cerr << "debug: value size = " << p.value_size() << endl;
+
+			for(int i=0; i < p.num_elements(); i++)
+				cerr << "debug: " <<  "[ " << to_hex(p.start_handle(i)) << ", " << to_hex(p.end_handle(i)) << ") :" << to_str(p.uuid(i)) << endl;
+		}
+		else
+			cerr << "debug: --no pretty printer available--\n";
 		
 		cerr << "debug:\n";
 	}
 };
 
+//Almost zero resource to represent the ATT protocol on a BLE
+//device. This class does none of its own memory management, and will not generally allocate
+//or do other nasty things. Oh no, it allocates a buffer!
+//
+//Mostly what it can do is write ATT command packets (PDUs) and receive PDUs back.
 struct BLEDevice
 {
 	bool constructing;
 	int sock;
-	static const int buflen=1024;
+	static const int buflen=ATT_DEFAULT_MTU;
 
 	void test_fd_(int fd, int line)
 	{
@@ -302,6 +423,103 @@ struct BLEDevice
 	}
 };
 
+//Easier to use implementation of the ATT protocol.
+//Blocks, rather than chunking packets.
+struct SimpleBlockingATTDevice: public BLEDevice
+{
+	template<class Ret, class PDUType, class E, class F, class G> 
+	vector<Ret> read_multiple(const bt_uuid_t& uuid, int request, int response, const E& call,  const F& func, const G& last)
+	{
+		vector<Ret> ret;
+		vector<uint8_t> buf(ATT_DEFAULT_MTU);
+		
+		int start=1;
+
+		for(;;)
+		{
+			call(uuid, start, 0xffff);
+			ResponsePDU r = receive(buf);
+
+			if(r.type() == ATT_OP_ERROR)
+			{
+				PDUErrorResponse err = r;
+
+				if(err.request_opcode() != request)
+				{
+					LOG(Error, string("Unexpected opcode in error. Expected ") + att_op2str(request) + " got "  + att_op2str(err.request_opcode()));
+					throw 1;
+				}
+				else if(err.error_code() != ATT_ECODE_ATTR_NOT_FOUND)
+				{
+					LOG(Error, string("Received unexpected error:") + att_ecode2str(err.error_code()));
+					throw 1;
+				}
+				else 
+					break;
+			}
+			else if(r.type() != response)
+			{
+					LOG(Error, string("Unexpected response. Expected ") + att_op2str(response) + " got "  + att_op2str(r.type()));
+			}
+			else
+			{
+				PDUType t = r;
+				for(int i=0; i < t.num_elements(); i++)
+					ret.push_back(func(t, i));
+				
+				if(last(t) == 0xffff)
+					break;
+				else
+					start = last(t)+1;
+
+				LOG(Debug, "New start = " << start);
+			}
+		}
+
+		return ret;
+
+	}
+
+
+	vector<pair<uint16_t, vector<uint8_t>>> read_by_type(const bt_uuid_t& uuid)
+	{
+		return read_multiple<pair<uint16_t, vector<uint8_t>>, PDUReadByTypeResponse>(uuid, ATT_OP_READ_BY_TYPE_REQ, ATT_OP_READ_BY_TYPE_RESP, 
+			[&](const bt_uuid_t& u, int start, int end)
+			{
+				send_read_by_type(u, start, end);	
+			},
+			[](const PDUReadByTypeResponse& p, int i)
+			{
+				return make_pair(p.handle(i),  vector<uint8_t>(p.value(i).first, p.value(i).second));
+			}, 
+			[](const PDUReadByTypeResponse& p)
+			{
+				return p.handle(p.num_elements()-1);
+			})
+			;
+
+	}
+
+	vector<tuple<uint16_t, uint16_t, bt_uuid_t>> read_by_group_type(const bt_uuid_t& uuid)
+	{
+		return read_multiple<tuple<uint16_t, uint16_t, bt_uuid_t>, PDUReadGroupByTypeResponse>(uuid, ATT_OP_READ_BY_GROUP_REQ, ATT_OP_READ_BY_GROUP_RESP, 
+			[&](const bt_uuid_t& u, int start, int end)
+			{
+				send_read_group_by_type(u, start, end);	
+			},
+			[](const PDUReadGroupByTypeResponse& p, int i)
+			{
+				return make_tuple(p.start_handle(i),  p.end_handle(i), p.uuid(i));
+			},
+			[](const PDUReadGroupByTypeResponse& p)
+			{
+				return p.end_handle(p.num_elements()-1);
+			});
+	}
+
+
+};
+
 template<class C> const C& haxx(const C& X)
 {
 	return X;
@@ -341,7 +559,7 @@ BLEDevice::BLEDevice()
 	addr.l2_family = AF_BLUETOOTH;
 
 	addr.l2_psm = 0;
-	addr.l2_cid = htobs(4); //HAXXY FIXME?
+	addr.l2_cid = htobs(LE_ATT_CID);
 
 
 	bacpy(&addr.l2_bdaddr, &source_address);
@@ -386,6 +604,22 @@ BLEDevice::BLEDevice()
 
 
 	//And this seems to work up to here.
+
+	//Get the options with a minor bit of cargo culting.
+	//SOL_L2CAP seems to mean that is should operate at the L2CAP level of the stack
+	//L2CAP_OPTIONS who knows?
+	ret = getsockopt(sock, SOL_L2CAP, L2CAP_OPTIONS, &options, &len);
+	test(ret);
+
+	LOGVAR(options.omtu);
+	LOGVAR(options.imtu);
+	LOGVAR(options.flush_to);
+	LOGVAR(options.mode);
+	LOGVAR(options.fcs);
+	LOGVAR(options.max_tx);
+	LOGVAR(options.txwin_size);
+
+
 }
 
 LogLevels log_level;
@@ -395,13 +629,37 @@ int main(int , char **)
 	log_level = Trace;
 	vector<uint8_t> buf(256);
 
-	BLEDevice b;
+	SimpleBlockingATTDevice b;
 	
 	bt_uuid_t uuid;
 	uuid.type = BT_UUID16;
 
 	uuid.value.u16 = 0x2800;
-	b.send_read_by_type(uuid);
+	
+	
+	log_level=Trace;
+
+	auto r = b.read_by_type(uuid);
+
+	for(unsigned int i=0; i < r.size(); i++)
+	{
+		cout << "Handle: " << to_hex(r[i].first) << ", Data: " << to_hex(r[i].second) << endl;
+		cout <<                "-->" << to_str(r[i].second) << "<--" << endl;
+	}
+
+
+
+	auto s = b.read_by_group_type(uuid);
+		
+	for(unsigned int i=0; i < s.size(); i++)
+	{
+		cout << "Start: " << to_hex(get<0>(s[i]));
+		cout << " End: " << to_hex(get<1>(s[i]));
+		cout << " UUID: " << to_str(get<2>(s[i])) << endl;
+	}
+
+
+	/*b.send_read_by_type(uuid);
 	b.receive(buf);
 
 	uuid.value.u16 = 0x2901;
@@ -435,4 +693,5 @@ int main(int , char **)
 	b.receive(buf);
 	b.send_read_group_by_type(uuid, 0x0013);
 	b.receive(buf);
+*/
 }
