@@ -1,0 +1,5 @@
+*.sw?
+*.o
+core
+bluez-tools/
+prog
