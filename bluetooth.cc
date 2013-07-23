@@ -7,6 +7,7 @@
 #include <iomanip>
 #include <cassert>
 #include <tuple>
+#include <stdexcept>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
@@ -23,6 +24,16 @@ using namespace std;
 
 #define LE_ATT_CID 4        //Spec 4.0 G.5.2.2
 #define ATT_DEFAULT_MTU 23  //Spec 4.0 G.5.2.1
+
+#define GATT_CHARACTERISTIC 0x2803
+#define GATT_CHARACTERISTIC_FLAGS_BROADCAST     0x01
+#define GATT_CHARACTERISTIC_FLAGS_READ          0x02
+#define GATT_CHARACTERISTIC_FLAGS_WRITE_WITHOUT_RESPONSE 0x04
+#define GATT_CHARACTERISTIC_FLAGS_WRITE         0x08
+#define GATT_CHARACTERISTIC_FLAGS_NOTIFY        0x10
+#define GATT_CHARACTERISTIC_FLAGS_INDICATE      0x20
+#define GATT_CHARACTERISTIC_FLAGS_AUTHENTICATED_SIGNED_WRITES 0x40
+#define GATT_CHARACTERISTIC_FLAGS_EXTENDED_PROPERTIES      0x80
 
 void test_fd_(int fd, int line)
 {
@@ -308,6 +319,8 @@ class PDUReadGroupByTypeResponse: public ResponsePDU
 
 };
 
+
+
 void pretty_print(const ResponsePDU& pdu)
 {
 	if(log_level >= Debug)
@@ -352,6 +365,9 @@ void pretty_print(const ResponsePDU& pdu)
 	}
 };
 
+
+
+
 //Almost zero resource to represent the ATT protocol on a BLE
 //device. This class does none of its own memory management, and will not generally allocate
 //or do other nasty things. Oh no, it allocates a buffer!
@@ -383,12 +399,19 @@ struct BLEDevice
 			LOG(Debug, "System call on " << line << ": " << strerror(errno) << " ret = " << fd);
 	}
 
+	void test_pdu(int len)
+	{
+		if(len == 0)
+			throw logic_error("Error constructing packet");
+	}
+
 	BLEDevice();
 
 	void send_read_by_type(const bt_uuid_t& uuid, uint16_t start = 0x0001, uint16_t end=0xffff)
 	{
 		vector<uint8_t> buf(buflen);
 		int len = enc_read_by_type_req(start, end, const_cast<bt_uuid_t*>(&uuid), buf.data(), buf.size());
+		test_pdu(len);
 		int ret = write(sock, buf.data(), len);
 		test(ret);
 	}
@@ -397,6 +420,7 @@ struct BLEDevice
 	{
 		vector<uint8_t> buf(buflen);
 		int len = enc_find_info_req(start, end, buf.data(), buf.size());
+		test_pdu(len);
 		int ret = write(sock, buf.data(), len);
 		test(ret);
 	}
@@ -405,6 +429,7 @@ struct BLEDevice
 	{
 		vector<uint8_t> buf(buflen);
 		int len = enc_read_by_grp_req(start, end, const_cast<bt_uuid_t*>(&uuid), buf.data(), buf.size());
+		test_pdu(len);
 		int ret = write(sock, buf.data(), len);
 		test(ret);
 	}
@@ -439,7 +464,7 @@ struct SimpleBlockingATTDevice: public BLEDevice
 		{
 			call(uuid, start, 0xffff);
 			ResponsePDU r = receive(buf);
-
+		
 			if(r.type() == ATT_OP_ERROR)
 			{
 				PDUErrorResponse err = r;
@@ -505,6 +530,7 @@ struct SimpleBlockingATTDevice: public BLEDevice
 		return read_multiple<tuple<uint16_t, uint16_t, bt_uuid_t>, PDUReadGroupByTypeResponse>(uuid, ATT_OP_READ_BY_GROUP_REQ, ATT_OP_READ_BY_GROUP_RESP, 
 			[&](const bt_uuid_t& u, int start, int end)
 			{
+				cerr << "wtf\n";
 				send_read_group_by_type(u, start, end);	
 			},
 			[](const PDUReadGroupByTypeResponse& p, int i)
@@ -519,6 +545,75 @@ struct SimpleBlockingATTDevice: public BLEDevice
 
 
 };
+
+
+
+class GATTReadCharacteristic: public  PDUReadByTypeResponse
+{
+	public:
+	struct Characteristic
+	{
+		uint16_t handle;
+		uint8_t  flags;
+		bt_uuid_t uuid;
+	};
+
+	GATTReadCharacteristic(const ResponsePDU& p)
+	:PDUReadByTypeResponse(p)
+	{
+		if(value_size() != 5 && value_size() != 19)		
+			throw runtime_error("Invalid packet size in GATTReadCharacteristic");
+	}
+
+	Characteristic characteristic(int i) const
+	{
+		Characteristic c;
+		c.handle = att_get_u16(value(i).first + 1);
+		c.flags  = value(i).first[0];
+
+		if(value_size() == 5)
+			c.uuid= att_get_uuid16(value(i).first + 3);
+		else
+			c.uuid= att_get_uuid128(value(i).first + 3);
+
+		return c;
+	}
+};
+
+
+class SimpleBlockingGATTDevice: public SimpleBlockingATTDevice
+{
+	public:
+
+	typedef GATTReadCharacteristic::Characteristic Characteristic;
+
+	vector<pair<uint16_t, Characteristic>> read_characaristic()
+	{
+		bt_uuid_t uuid;
+		uuid.value.u16 = GATT_CHARACTERISTIC;
+		uuid.type = BT_UUID16;
+		return read_multiple<pair<uint16_t, Characteristic>, GATTReadCharacteristic>(uuid, ATT_OP_READ_BY_TYPE_REQ, ATT_OP_READ_BY_TYPE_RESP, 
+			[&](const bt_uuid_t& u, int start, int end)
+			{
+				send_read_by_type(u, start, end);	
+			},
+			[](const GATTReadCharacteristic& p, int i)
+			{
+				return make_pair(p.handle(i), p.characteristic(i));
+			},
+			[](const GATTReadCharacteristic& p)
+			{
+				return p.handle(p.num_elements()-1);
+			});
+	}
+
+
+};
+
+
+
+
+
 
 template<class C> const C& haxx(const C& X)
 {
@@ -626,10 +721,10 @@ LogLevels log_level;
 
 int main(int , char **)
 {
-	log_level = Trace;
+	log_level = Warning;
 	vector<uint8_t> buf(256);
 
-	SimpleBlockingATTDevice b;
+	SimpleBlockingGATTDevice b;
 	
 	bt_uuid_t uuid;
 	uuid.type = BT_UUID16;
@@ -637,7 +732,7 @@ int main(int , char **)
 	uuid.value.u16 = 0x2800;
 	
 	
-	log_level=Trace;
+	//log_level=Trace;
 
 	auto r = b.read_by_type(uuid);
 
@@ -657,7 +752,29 @@ int main(int , char **)
 		cout << " End: " << to_hex(get<1>(s[i]));
 		cout << " UUID: " << to_str(get<2>(s[i])) << endl;
 	}
-
+	
+	auto r1 = b.read_characaristic();
+	for(const auto& i: r1)
+	{
+		cout << to_hex(i.first) << " Handle: " << to_hex(i.second.handle) << "  UUID: " << to_str(i.second.uuid)<<  " Flags: ";
+		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_BROADCAST)
+			cout << "Broadcast ";
+		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_READ)
+			cout << "Read ";
+		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_WRITE_WITHOUT_RESPONSE)
+			cout << "Write (without response) ";
+		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_WRITE)
+			cout << "Write ";
+		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_NOTIFY)
+			cout << "Notify ";
+		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_INDICATE)
+			cout << "Indicate ";
+		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_AUTHENTICATED_SIGNED_WRITES)
+			cout << "Authenticated signed writes ";
+		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_EXTENDED_PROPERTIES)
+			cout << "Extended properties ";
+		cout << endl;
+	}
 
 	/*b.send_read_by_type(uuid);
 	b.receive(buf);
@@ -679,10 +796,64 @@ int main(int , char **)
 
 
 	cerr << endl<<endl<<endl;
-
+*/
+	log_level=Trace;
 	b.send_find_information();
-	b.receive(buf);
+	ResponsePDU  r2 = b.receive(buf);
 
+	for(int i=2; i < r2.length; i+=4)
+	{
+		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
+		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
+	}
+
+	b.send_find_information(0x006);
+	r2 = b.receive(buf);
+
+	for(int i=2; i < r2.length; i+=4)
+	{
+		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
+		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
+	}
+	b.send_find_information(0x00b);
+	r2 = b.receive(buf);
+
+	for(int i=2; i < r2.length; i+=4)
+	{
+		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
+		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
+	}
+	b.send_find_information(0x010);
+	r2 = b.receive(buf);
+
+	for(int i=2; i < r2.length; i+=4)
+	{
+		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
+		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
+	}
+	b.send_find_information(0x015);
+	r2 = b.receive(buf);
+
+	for(int i=2; i < r2.length; i+=4)
+	{
+		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
+		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
+	}
+
+	b.send_find_information(0x017);
+	r2 = b.receive(buf);
+
+	for(int i=2; i < r2.length; i+=4)
+	{
+		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
+		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
+	}
+
+
+
+
+
+/*
 	cerr << endl<<endl<<endl;
 	cerr << endl<<endl<<endl;
 	cerr << endl<<endl<<endl;

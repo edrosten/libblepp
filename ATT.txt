@@ -19,8 +19,8 @@ it's more like:
 
 read:  Handle -> Data | Null
 
-Each attribute also has Information, which consists of Properties (a set of
-flags), a Type (stored as a UUID). Formally:
+Each attribute also has Information, which consists of a Type (stored as a
+UUID). Formally:
 
 find_information: [ (Handle, Type) ]
 
@@ -66,5 +66,37 @@ read_by_type: (Type, Handle.first, Handle.last) -> [ (Handle, Data) ] | Error.no
 
 The Generic Attribute Profile 
 -----------------------------
+
+The generic attribute (GATT) profile defines a standard set of attributes,
+along with mechanisms for discovery.
+
+A GATT profile consists of a number of services. A service defines a set of
+"characteristics". A characteristic is is some kind of readable or writable
+property, and information about that.
+
+Primary services are groups of handles which have the name <<Primary Service>>
+aka 0x2900. Therefore 
+	read_group_by_type(0x2900) 
+returns the list of services.  Any handle falling in the the group belongs to
+the service named by that group.  The names are either ones specified by the SIG
+or custom ones. 
+
+The list of characteristics can be read by reading type <<Characteristic>> aka 2803.
+	read_by_type 0x2803
+The return from this is for each characteristic:
+
+<Property> <Handle> <Type>
+
+Property is a bit field indicating various properties, things like readable,
+writable, notifyable, and so on.
+
+Two services must always be present: <<Generic Access>> (aka 1800) and <<Generic
+Attribute>> (aka 1801)
+
+
+If a characteristic value is readable, it is indicated by the property. Also,
+the value will have handle <Handle> and type <Type>. It can be read by reading
+the handle or reading by it's type. In other words <Handle> and <Type> are
+(nearly?) tautological.
 
 
