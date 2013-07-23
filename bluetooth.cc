@@ -17,9 +17,7 @@
 #include <unistd.h>
 #include "logging.h"
 #include "lib/uuid.h"
-extern "C"{
-#include "att.h"
-}
+#include "att_pdu.h"
 using namespace std;
 
 #define LE_ATT_CID 4        //Spec 4.0 G.5.2.2
@@ -124,204 +122,9 @@ string to_str(const vector<uint8_t>& v)
 
 
 #define test(X) test_fd_(X, __LINE__)
-class ResponsePDU;
-
-class ResponsePDU
-{
-	protected:
-		void type_mismatch() const
-		{	
-			throw 1;
-		}
-	
-	public:
-
-		const uint8_t* data;
-		int length;
-
-		uint8_t uint8(int i) const
-		{
-			assert(i >= 0 && i < length);
-			return data[i];
-		}
-
-		uint16_t uint16(int i) const
-		{
-			return uint8(i) | (uint8(i+1) << 8);
-		}
-
-		ResponsePDU(const uint8_t* d_, int l_)
-		:data(d_),length(l_)
-		{
-		}
-
-		uint8_t type() const 
-		{
-			return uint8(0);
-		}
-};
-
-class PDUErrorResponse: public ResponsePDU
-{
-	public:
-		PDUErrorResponse(const ResponsePDU& p_)
-		:ResponsePDU(p_)
-		{
-			if(type()  != ATT_OP_ERROR)
-				type_mismatch();
-		}
-
-		uint8_t request_opcode() const
-		{
-			return uint8(1);
-		}
-
-		uint16_t handle() const
-		{
-			return uint16(2);
-		}
-
-		uint8_t error_code() const
-		{
-			return uint8(4);
-		}
-		
-		const char* error_str() const
-		{
-			return att_ecode2str(error_code());
-		}
-};
 
 
-class PDUReadByTypeResponse: public ResponsePDU
-{
-	public:
-		PDUReadByTypeResponse(const ResponsePDU& p_)
-		:ResponsePDU(p_)
-		{
-			if(type()  != ATT_OP_READ_BY_TYPE_RESP)
-				type_mismatch();
-
-			if((length - 2) % element_size() != 0)
-			{
-				//Packet length is invalid.
-				throw 1.;
-			}
-		}
-
-		int value_size() const
-		{
-			return uint8(1) -2;
-		}
-
-		int element_size() const
-		{
-			return uint8(1);
-		}
-
-		int num_elements() const
-		{
-			return (length - 1) / element_size();
-		}
-		
-		uint16_t handle(int i) const
-		{
-			return uint16(i*element_size() + 2);
-		}
-
-		pair<const uint8_t*, const uint8_t*> value(int i) const
-		{
-			const uint8_t* begin = data + i*element_size() + 4;
-			return make_pair(begin, begin + value_size());
-		}
-
-		uint16_t value_uint16(int i) const
-		{
-			assert(value_size() == 2);
-			return uint16(i*element_size()+4);
-		}
-
-};
-
-
-class PDUReadGroupByTypeResponse: public ResponsePDU
-{
-	public:
-		PDUReadGroupByTypeResponse(const ResponsePDU& p_)
-		:ResponsePDU(p_)
-		{
-			if(type()  != ATT_OP_READ_BY_GROUP_RESP)
-				type_mismatch();
-
-			if((length - 2) % element_size() != 0)
-			{
-				//Packet length is invalid.
-				LOG(Error, "Invalid packet length");
-				throw 1.;
-			}
-
-			if(value_size() != 2 && value_size() != 16)
-			{
-				LOG(Error, "Invalid UUID length" << value_size());
-				throw 1.;
-			}
-		}
-
-		int value_size() const
-		{
-			return uint8(1) -4;
-		}
-
-		int element_size() const
-		{
-			return uint8(1);
-		}
-
-		int num_elements() const
-		{
-			return (length - 2) / element_size();
-		}
-		
-		uint16_t start_handle(int i) const
-		{
-			return uint16(i*element_size() + 2);
-		}
-
-		uint16_t end_handle(int i) const
-		{
-			return uint16(i*element_size() + 4);
-		}
-
-		bt_uuid_t uuid(int i) const
-		{
-			const uint8_t* begin = data + i*element_size() + 6;
-
-			bt_uuid_t uuid;
-			if(value_size() == 2)
-			{
-				uuid.type = BT_UUID16;
-				uuid.value.u16 = att_get_u16(begin);
-			}
-			else
-			{
-				uuid.type = BT_UUID128;
-				uuid.value.u128 = att_get_u128(begin);
-			}
-				
-			return uuid;
-		}
-
-		uint16_t value_uint16(int i) const
-		{
-			assert(value_size() == 2);
-			return uint16(i*element_size()+4);
-		}
-
-};
-
-
-
-void pretty_print(const ResponsePDU& pdu)
+void pretty_print(const PDUResponse& pdu)
 {
 	if(log_level >= Debug)
 	{
@@ -434,15 +237,15 @@ struct BLEDevice
 		test(ret);
 	}
 
-	ResponsePDU receive(uint8_t* buf, int max)
+	PDUResponse receive(uint8_t* buf, int max)
 	{
 		int len = read(sock, buf, max);
 		test(len);
-		pretty_print(ResponsePDU(buf, len));
-		return ResponsePDU(buf, len);
+		pretty_print(PDUResponse(buf, len));
+		return PDUResponse(buf, len);
 	}
 
-	ResponsePDU receive(vector<uint8_t>& v)
+	PDUResponse receive(vector<uint8_t>& v)
 	{
 		return receive(v.data(), v.size());
 	}
@@ -453,7 +256,7 @@ struct BLEDevice
 struct SimpleBlockingATTDevice: public BLEDevice
 {
 	template<class Ret, class PDUType, class E, class F, class G> 
-	vector<Ret> read_multiple(const bt_uuid_t& uuid, int request, int response, const E& call,  const F& func, const G& last)
+	vector<Ret> read_multiple(int request, int response, const E& call,  const F& func, const G& last)
 	{
 		vector<Ret> ret;
 		vector<uint8_t> buf(ATT_DEFAULT_MTU);
@@ -462,8 +265,8 @@ struct SimpleBlockingATTDevice: public BLEDevice
 
 		for(;;)
 		{
-			call(uuid, start, 0xffff);
-			ResponsePDU r = receive(buf);
+			call(start, 0xffff);
+			PDUResponse r = receive(buf);
 		
 			if(r.type() == ATT_OP_ERROR)
 			{
@@ -508,10 +311,10 @@ struct SimpleBlockingATTDevice: public BLEDevice
 
 	vector<pair<uint16_t, vector<uint8_t>>> read_by_type(const bt_uuid_t& uuid)
 	{
-		return read_multiple<pair<uint16_t, vector<uint8_t>>, PDUReadByTypeResponse>(uuid, ATT_OP_READ_BY_TYPE_REQ, ATT_OP_READ_BY_TYPE_RESP, 
-			[&](const bt_uuid_t& u, int start, int end)
+		return read_multiple<pair<uint16_t, vector<uint8_t>>, PDUReadByTypeResponse>(ATT_OP_READ_BY_TYPE_REQ, ATT_OP_READ_BY_TYPE_RESP, 
+			[&](int start, int end)
 			{
-				send_read_by_type(u, start, end);	
+				send_read_by_type(uuid, start, end);	
 			},
 			[](const PDUReadByTypeResponse& p, int i)
 			{
@@ -527,11 +330,10 @@ struct SimpleBlockingATTDevice: public BLEDevice
 
 	vector<tuple<uint16_t, uint16_t, bt_uuid_t>> read_by_group_type(const bt_uuid_t& uuid)
 	{
-		return read_multiple<tuple<uint16_t, uint16_t, bt_uuid_t>, PDUReadGroupByTypeResponse>(uuid, ATT_OP_READ_BY_GROUP_REQ, ATT_OP_READ_BY_GROUP_RESP, 
-			[&](const bt_uuid_t& u, int start, int end)
+		return read_multiple<tuple<uint16_t, uint16_t, bt_uuid_t>, PDUReadGroupByTypeResponse>(ATT_OP_READ_BY_GROUP_REQ, ATT_OP_READ_BY_GROUP_RESP, 
+			[&](int start, int end)
 			{
-				cerr << "wtf\n";
-				send_read_group_by_type(u, start, end);	
+				send_read_group_by_type(uuid, start, end);	
 			},
 			[](const PDUReadGroupByTypeResponse& p, int i)
 			{
@@ -543,7 +345,23 @@ struct SimpleBlockingATTDevice: public BLEDevice
 			});
 	}
 
-
+	
+	vector<pair<uint16_t, bt_uuid_t>> find_information()
+	{
+		return read_multiple<pair<uint16_t, bt_uuid_t>, PDUFindInformationResponse>(ATT_OP_FIND_INFO_REQ, ATT_OP_FIND_INFO_RESP, 
+			[&](int start, int end)
+			{
+				send_find_information(start, end);
+			},
+			[](const PDUFindInformationResponse&p, int i)
+			{
+				return make_pair(p.handle(i), p.uuid(i));
+			},
+			[](const PDUFindInformationResponse& p)
+			{
+				return p.handle(p.num_elements()-1);
+			});
+	}
 };
 
 
@@ -558,7 +376,7 @@ class GATTReadCharacteristic: public  PDUReadByTypeResponse
 		bt_uuid_t uuid;
 	};
 
-	GATTReadCharacteristic(const ResponsePDU& p)
+	GATTReadCharacteristic(const PDUResponse& p)
 	:PDUReadByTypeResponse(p)
 	{
 		if(value_size() != 5 && value_size() != 19)		
@@ -592,10 +410,10 @@ class SimpleBlockingGATTDevice: public SimpleBlockingATTDevice
 		bt_uuid_t uuid;
 		uuid.value.u16 = GATT_CHARACTERISTIC;
 		uuid.type = BT_UUID16;
-		return read_multiple<pair<uint16_t, Characteristic>, GATTReadCharacteristic>(uuid, ATT_OP_READ_BY_TYPE_REQ, ATT_OP_READ_BY_TYPE_RESP, 
-			[&](const bt_uuid_t& u, int start, int end)
+		return read_multiple<pair<uint16_t, Characteristic>, GATTReadCharacteristic>(ATT_OP_READ_BY_TYPE_REQ, ATT_OP_READ_BY_TYPE_RESP, 
+			[&](int start, int end)
 			{
-				send_read_by_type(u, start, end);	
+				send_read_by_type(uuid, start, end);	
 			},
 			[](const GATTReadCharacteristic& p, int i)
 			{
@@ -776,6 +594,13 @@ int main(int , char **)
 		cout << endl;
 	}
 
+	cout << "Information\n";
+	auto r2 = b.find_information();
+	for(const auto &i: r2)
+	{
+		cout << "Handle: " << to_hex(i.first) << "	Type: " << to_str(i.second) << endl;
+	}
+
 	/*b.send_read_by_type(uuid);
 	b.receive(buf);
 
@@ -797,61 +622,6 @@ int main(int , char **)
 
 	cerr << endl<<endl<<endl;
 */
-	log_level=Trace;
-	b.send_find_information();
-	ResponsePDU  r2 = b.receive(buf);
-
-	for(int i=2; i < r2.length; i+=4)
-	{
-		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
-		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
-	}
-
-	b.send_find_information(0x006);
-	r2 = b.receive(buf);
-
-	for(int i=2; i < r2.length; i+=4)
-	{
-		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
-		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
-	}
-	b.send_find_information(0x00b);
-	r2 = b.receive(buf);
-
-	for(int i=2; i < r2.length; i+=4)
-	{
-		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
-		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
-	}
-	b.send_find_information(0x010);
-	r2 = b.receive(buf);
-
-	for(int i=2; i < r2.length; i+=4)
-	{
-		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
-		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
-	}
-	b.send_find_information(0x015);
-	r2 = b.receive(buf);
-
-	for(int i=2; i < r2.length; i+=4)
-	{
-		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
-		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
-	}
-
-	b.send_find_information(0x017);
-	r2 = b.receive(buf);
-
-	for(int i=2; i < r2.length; i+=4)
-	{
-		cout << to_hex(att_get_u16(buf.data() + i)) << " " 
-		     << to_hex(att_get_u16(buf.data() + i + 2)) <<  endl;
-	}
-
-
-
-
 
 /*
 	cerr << endl<<endl<<endl;
