@@ -71,12 +71,12 @@ The generic attribute (GATT) profile defines a standard set of attributes,
 along with mechanisms for discovery.
 
 A GATT profile consists of a number of services. A service defines a set of
-"characteristics". A characteristic is is some kind of readable or writable
-property, and information about that.
+"characteristics". A characteristic pas properties (e.g. readable, writable), 
+a value and zero or more descriptors (e.g. some textual description).
 
 Primary services are groups of handles which have the name <<Primary Service>>
-aka 0x2900. Therefore 
-	read_group_by_type(0x2900) 
+aka 0x2800. Therefore 
+	read_group_by_type(0x2800) 
 returns the list of services.  Any handle falling in the the group belongs to
 the service named by that group.  The names are either ones specified by the SIG
 or custom ones. 
