@@ -552,16 +552,16 @@ int main(int , char **)
 	
 	//log_level=Trace;
 
-	auto r = b.read_by_type(uuid);
+	/*auto r = b.read_by_type(uuid);
 
 	for(unsigned int i=0; i < r.size(); i++)
 	{
 		cout << "Handle: " << to_hex(r[i].first) << ", Data: " << to_hex(r[i].second) << endl;
 		cout <<                "-->" << to_str(r[i].second) << "<--" << endl;
-	}
+	}*/
 
 
-
+	cout << "Primary:\n";
 	auto s = b.read_by_group_type(uuid);
 		
 	for(unsigned int i=0; i < s.size(); i++)
@@ -571,6 +571,7 @@ int main(int , char **)
 		cout << " UUID: " << to_str(get<2>(s[i])) << endl;
 	}
 	
+	cout << "Characteristic\n";
 	auto r1 = b.read_characaristic();
 	for(const auto& i: r1)
 	{
