@@ -1,3 +1,33 @@
+
+/*
+   Copyright (c) 2013  Edward Rosten
+
+	All rights reserved.
+
+	Redistribution and use in source and binary forms, with or without
+	modification, are permitted provided that the following conditions are met:
+		* Redistributions of source code must retain the above copyright
+		  notice, this list of conditions and the following disclaimer.
+		* Redistributions in binary form must reproduce the above copyright
+		  notice, this list of conditions and the following disclaimer in the
+		  documentation and/or other materials provided with the distribution.
+		* Neither the name of the <organization> nor the
+		  names of its contributors may be used to endorse or promote products
+		  derived from this software without specific prior written permission.
+
+	THIS SOFTWARE IS PROVIDED BY THE COPYRIGHT HOLDERS AND CONTRIBUTORS "AS IS" AND
+	ANY EXPRESS OR IMPLIED WARRANTIES, INCLUDING, BUT NOT LIMITED TO, THE IMPLIED
+	WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR PURPOSE ARE
+	DISCLAIMED. IN NO EVENT SHALL <COPYRIGHT HOLDER> BE LIABLE FOR ANY
+	DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES
+	(INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES;
+	LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND
+	ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT
+	(INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS
+	SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+*/
+
+
 #include <iostream>
 #include <cstdlib>
 #include <cstring>
@@ -173,7 +203,7 @@ void pretty_print(const PDUResponse& pdu)
 
 //Almost zero resource to represent the ATT protocol on a BLE
 //device. This class does none of its own memory management, and will not generally allocate
-//or do other nasty things. Oh no, it allocates a buffer!
+//or do other nasty things. Oh no, it allocates a buffer! FIXME!
 //
 //Mostly what it can do is write ATT command packets (PDUs) and receive PDUs back.
 struct BLEDevice
@@ -208,7 +238,7 @@ struct BLEDevice
 			throw logic_error("Error constructing packet");
 	}
 
-	BLEDevice();
+	BLEDevice(const std::string&);
 
 	void send_read_by_type(const bt_uuid_t& uuid, uint16_t start = 0x0001, uint16_t end=0xffff)
 	{
@@ -252,9 +282,14 @@ struct BLEDevice
 };
 
 //Easier to use implementation of the ATT protocol.
-//Blocks, rather than chunking packets.
+//This implementation reads whole chunks of stuff in one go
+//and feeds back the data to the user.
 struct SimpleBlockingATTDevice: public BLEDevice
 {
+	SimpleBlockingATTDevice(const std::string& s)
+	:BLEDevice(s)
+	{}
+
 	template<class Ret, class PDUType, class E, class F, class G> 
 	vector<Ret> read_multiple(int request, int response, const E& call,  const F& func, const G& last)
 	{
@@ -288,6 +323,8 @@ struct SimpleBlockingATTDevice: public BLEDevice
 			else if(r.type() != response)
 			{
 					LOG(Error, string("Unexpected response. Expected ") + att_op2str(response) + " got "  + att_op2str(r.type()));
+					//FIXME
+					//Break if the packed is NOT a notification or indication
 			}
 			else
 			{
@@ -364,8 +401,6 @@ struct SimpleBlockingATTDevice: public BLEDevice
 	}
 };
 
-
-
 class GATTReadCharacteristic: public  PDUReadByTypeResponse
 {
 	public:
@@ -399,9 +434,15 @@ class GATTReadCharacteristic: public  PDUReadByTypeResponse
 };
 
 
+//This class layers the GATT profile on top of the ATT proticol
+//Provides higher level GATT specific meaning to attributes.
 class SimpleBlockingGATTDevice: public SimpleBlockingATTDevice
 {
 	public:
+	SimpleBlockingGATTDevice(const std::string& s)
+	:SimpleBlockingATTDevice(s)
+	{
+	}
 
 	typedef GATTReadCharacteristic::Characteristic Characteristic;
 
@@ -443,8 +484,9 @@ int haxx(uint8_t X)
 	return X;
 }
 #define LOGVAR(X) LOG(Debug, #X << " = " << haxx(X))
+#define LOGVAR(X) cerr << #X << " = " << haxx(X) << endl
 
-BLEDevice::BLEDevice()
+BLEDevice::BLEDevice(const std::string& address)
 :constructing(true)
 {
 	//Allocate socket and create endpoint.
@@ -511,7 +553,7 @@ BLEDevice::BLEDevice()
 
 	
 	//Can also use bacpy to copy addresses about
-	str2ba("3C:2D:B7:85:50:2A", &addr.l2_bdaddr);
+	str2ba(address.c_str(), &addr.l2_bdaddr);
 	ret = connect(sock, (sockaddr*)&addr, sizeof(addr));
 	test(ret);
 
@@ -542,7 +584,8 @@ int main(int , char **)
 	log_level = Warning;
 	vector<uint8_t> buf(256);
 
-	SimpleBlockingGATTDevice b;
+	//SimpleBlockingGATTDevice b("3C:2D:B7:85:50:2A");
+	SimpleBlockingGATTDevice b("00:07:80:53:f9:3d");
 	
 	bt_uuid_t uuid;
 	uuid.type = BT_UUID16;
@@ -550,7 +593,7 @@ int main(int , char **)
 	uuid.value.u16 = 0x2800;
 	
 	
-	//log_level=Trace;
+	log_level=Warning;
 
 	/*auto r = b.read_by_type(uuid);
 
