@@ -8,46 +8,93 @@ Alternatives are indicated with |. For arguments, The type is written first, and
 the name (if applicable) follows after a  "." .
 
 
-Attribute Protocol: A high level view
--------------------------------------
+Attributes
+----------
 
-The ATT protocol allows you to read data off the bluetooth device.
+The device contains an array of attributes. The index of tha attributes in known
+as the handle. The attributes themselves consist of a "type" and a "value". The
+type is a type code and is represented as a UUID.  UUIDs are either 16 or 128
+bits long. 16 bit UUIDs are converted to proper 128 bit UUID by setting the
+remaining 112 bits to some fixed values. The purpose of 16 bit UUIDs is to save
+on bandwidth.
+ 
+Every attribute must have a type. The value is just plain old data (a bunch of
+bytes) and may be readable or writable[*] or neither. The read/write status of
+an attribute is defined by a higher level protocol and there is no way of
+querying this.
 
-Attributes are read by handle. Data is arranged as an array indexed by handle,
-or equivalently a function of Handle->Data. Not every element is indexable, so
-it's more like:
+[*] The data may be also indicatable or notifiable. In these cases, the
+bluetooth device (the server) may send the attribute values back to the client
+at any time without solicitation.
 
-read:  Handle -> Data | Null
+So, in essence the server has an array of:
+[ (Handle, Type, Data | Null)]
 
-Each attribute also has Information, which consists of a Type (stored as a
-UUID). Formally:
+Being an array, one can naturally index it using Handle. In some cases however
+it is also possible to index it by the Type in some cases.
 
-find_information: [ (Handle, Type) ]
+There are various function for extracting information from the server:
+
+find_information: [(Handle, Type)]
+
+This gets a list of attributes back from the server as the handel and type. The
+data can be read from an attribute in one of two ways:
+
+read: Handle->Data | Error
+
+which reads the data from a given handle. Alternatively, data can be read by the
+Type:
+
+read_by_type: Type -> [(Handle | Data)]
+
+Since several attributes may share a type (and often do), read_by_type must be
+able to return a of attributes. Since the type is known, all it has to give back
+is the Handle and the data.
+
+Naturally, there exist commands for writing too.
 
 
-Using a combination of find_information and read_attribute, one could create the
-list [ (Handle, Type, Data) ] for all attributes. It is simple to find all
-data elements matching a certain type. To prevent excessive reading, a function
-is provided which reads all data of a given type:
+There is also a concept of Grouping as well. A group is a contiguous set of
+attributes (contiguous according to the handle). Groups can be read by their
+type. Groups are delimited by attributes of the specified type. A sample set of
+attributes, as [(Handle, Type, Data)] follows. Note that the Types and data are
+Arbitrary. If the group type is specified to be 0xdead, then thr grouping
+appears as:
 
-read_by_type: Type -> [(Handle, Data)]
+0001  dead  some data     \
+0002  2a00  xxxxx          |  First group
+0003  5600  xxxxxxxx      /_________________
+0004  dead  more data     \
+0005  1234  xxxxxxx        |  Second group
+0006  4567  xxxxxxxx       |
+0007  1231  xxxxx         /_________________
+0008  dead  another datum \   Third group
+0009  wtf                 /
+EOF
 
-NB: types are generally rather high level things. "string" is not a type,
-"device name" would be a type. I believe that all data elements sharing a type
-must have the same length. A "Type" is more of a name.
+The command to read this is:
 
-Closely related to read_by_type is the function read_group_by_type. Not only do
-attributes have a type, but an entire group can be of a certain type:
+read_by_group_type Type->[(Handle, Handle, Data)]
 
-read_group_by_type: Type -> [( Handle, Handle, Type ) ]
+where, the start and end handle along with the data for the start handle is
+returned, so in this case
 
-The returned value is the first handle in the group, the second is one past the
-last handle, and the Type is the type of that particular element of the group,
-not the type of the group itself.
+read_by_group_type(dead) will return:
+
+0001 0003 "some data"
+0005 0007 "more data"
+0008 ffff "another datum"
+
+ffff being the highest possible handle number indicates that nothing can follow.
+
+
 
 
 Actually reading data
 ---------------------
+
+The BLE packet length is a mere 23 bytes. Optionally both devices may be able to
+lengthen it, but this is not normally supported.
 
 In practice each query can only be answered with a very limited amount of data.
 Note that each of the functions above (except read) returns a list of handles.

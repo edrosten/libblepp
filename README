@@ -1,5 +1,7 @@
 My adventures in bluetooth with the BLE112 devkit.
 
+Note, my machine is called "sheepfrog" http://en.wikipedia.org/wiki/Sheep_frog 
+
 Get list of adapters:
 
 $bt-adapter -l
@@ -104,6 +106,10 @@ apparently GATT and ATT are mandatory in BLE.
 Documents about the generic attribute profile are here:
 
 http://developer.bluetooth.org/TechnologyOverview/Pages/GATT.aspx
+
+
+
+
 
 
 

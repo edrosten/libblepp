@@ -53,6 +53,7 @@ using namespace std;
 #define LE_ATT_CID 4        //Spec 4.0 G.5.2.2
 #define ATT_DEFAULT_MTU 23  //Spec 4.0 G.5.2.1
 
+#define GATT_UUID_PRIMARY 0x2800
 #define GATT_CHARACTERISTIC 0x2803
 #define GATT_CHARACTERISTIC_FLAGS_BROADCAST     0x01
 #define GATT_CHARACTERISTIC_FLAGS_READ          0x02
@@ -106,7 +107,12 @@ string to_str(const bt_uuid_t& uuid)
 	if(uuid.type == BT_UUID16)
 		return to_hex(uuid.value.u16);
 	else if(uuid.type == BT_UUID128)
-		return "--128--";
+	{
+		static const int max=64;
+		char str[max] = {0};
+		bt_uuid_to_string(&uuid, str, max-1);
+		return str;
+	}
 	else
 		return "uuid.wtf";
 
@@ -364,7 +370,7 @@ struct SimpleBlockingATTDevice: public BLEDevice
 			;
 
 	}
-
+	
 	vector<tuple<uint16_t, uint16_t, bt_uuid_t>> read_by_group_type(const bt_uuid_t& uuid)
 	{
 		return read_multiple<tuple<uint16_t, uint16_t, bt_uuid_t>, PDUReadGroupByTypeResponse>(ATT_OP_READ_BY_GROUP_REQ, ATT_OP_READ_BY_GROUP_RESP, 
@@ -401,6 +407,8 @@ struct SimpleBlockingATTDevice: public BLEDevice
 	}
 };
 
+
+///Interpret a ReadByTypeResponse packet as a ReadCharacteristic packet
 class GATTReadCharacteristic: public  PDUReadByTypeResponse
 {
 	public:
@@ -465,8 +473,6 @@ class SimpleBlockingGATTDevice: public SimpleBlockingATTDevice
 				return p.handle(p.num_elements()-1);
 			});
 	}
-
-
 };
 
 
@@ -579,13 +585,18 @@ BLEDevice::BLEDevice(const std::string& address)
 
 LogLevels log_level;
 
-int main(int , char **)
+int main(int argc, char **argv)
 {
+	if(argc != 2)
+	{	
+		cerr << "Please supply address.\n";
+		exit(1);
+	}
+
 	log_level = Warning;
 	vector<uint8_t> buf(256);
 
-	//SimpleBlockingGATTDevice b("3C:2D:B7:85:50:2A");
-	SimpleBlockingGATTDevice b("00:07:80:53:f9:3d");
+	SimpleBlockingGATTDevice b(argv[1]);
 	
 	bt_uuid_t uuid;
 	uuid.type = BT_UUID16;
@@ -614,6 +625,7 @@ int main(int , char **)
 		cout << " UUID: " << to_str(get<2>(s[i])) << endl;
 	}
 	
+	//Note that characteristics form a group.
 	cout << "Characteristic\n";
 	auto r1 = b.read_characaristic();
 	for(const auto& i: r1)
