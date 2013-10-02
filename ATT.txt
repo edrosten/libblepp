@@ -87,8 +87,9 @@ read_by_group_type(dead) will return:
 
 ffff being the highest possible handle number indicates that nothing can follow.
 
-
-
+It would appear that in the absence of efficiency concerns, one could replicate
+all the functions by queryiing every attribute with find_information and then
+reading whichever handles are necessary with read.
 
 Actually reading data
 ---------------------
@@ -115,7 +116,7 @@ The Generic Attribute Profile
 -----------------------------
 
 The generic attribute (GATT) profile defines a standard set of attributes,
-along with mechanisms for discovery.
+types and groups along with mechanisms for discovery.
 
 A GATT profile consists of a number of services. A service defines a set of
 "characteristics". A characteristic pas properties (e.g. readable, writable), 
@@ -127,6 +128,42 @@ aka 0x2800. Therefore
 returns the list of services.  Any handle falling in the the group belongs to
 the service named by that group.  The names are either ones specified by the SIG
 or custom ones. 
+
+Within each service there is a list of characteristics. Each characteristic
+contains a group of handles. However, it is not possible to use
+read_by_group_type on <<Characteristic>> (aka 2803), since characteristic groups
+are terminated either by the presence of the next characteristic or by the next
+service. Recall that read_by_group_type insists that the delimiter must be the
+type.
+
+
+A characteristic consists of:
+
+* a characteristic definition (Type <<Characteristic>>)
+  which includes the Type of the characteristic, the handle of the
+  characteristic value and some miscellaneous flags.
+
+* A characteristic value. Naturally, this has the Type of the characteristic.
+  The value may not actually be readable, or writable. For example the value
+  might only be pushed to the client via notifications.
+
+* Additional descriptors. The descriptors contain miscellaneous extra
+  information about the characteristic. The descriptors have a Type which
+  declares the semantic meaning of the descriptor. The meaning of the data is
+  naturally dependent on the Type.
+
+  Common descriptors are:
+
+  <<Characteristic User Description>> (2901) Some text describing the
+  characteristic.
+
+  <<Client Characteristic Configuration>> (2902) A write only attribute that is
+  written to enable and disable notifications and indications on thr
+  characteristic value.
+  
+  There are others too.
+
+
 
 The list of characteristics can be read by reading type <<Characteristic>> aka 2803.
 	read_by_type 0x2803

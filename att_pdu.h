@@ -212,11 +212,6 @@ class PDUReadGroupByTypeResponse: public PDUResponse
 			if((length - 2) % element_size() != 0)
 				error<std::runtime_error>("Invalid packet length for PDUReadGroupByTypeResponse");
 
-			if(value_size() != 2 && value_size() != 16)
-			{
-				LOG(Error, "UUID length" << value_size());
-				error<std::runtime_error>("Invalid UUID length in PDUReadGroupByTypeResponse");
-			}
 		}
 
 		int value_size() const
@@ -243,24 +238,11 @@ class PDUReadGroupByTypeResponse: public PDUResponse
 		{
 			return uint16(i*element_size() + 4);
 		}
-
-		bt_uuid_t uuid(int i) const
+		
+		std::pair<const uint8_t*, const uint8_t*> value(int i) const
 		{
 			const uint8_t* begin = data + i*element_size() + 6;
-
-			bt_uuid_t uuid;
-			if(value_size() == 2)
-			{
-				uuid.type = BT_UUID16;
-				uuid.value.u16 = att_get_u16(begin);
-			}
-			else
-			{
-				uuid.type = BT_UUID128;
-				uuid.value.u128 = att_get_u128(begin);
-			}
-				
-			return uuid;
+			return std::make_pair(begin, begin + value_size());
 		}
 
 		uint16_t value_uint16(int i) const

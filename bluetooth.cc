@@ -195,7 +195,7 @@ void pretty_print(const PDUResponse& pdu)
 			cerr << "debug: value size = " << p.value_size() << endl;
 
 			for(int i=0; i < p.num_elements(); i++)
-				cerr << "debug: " <<  "[ " << to_hex(p.start_handle(i)) << ", " << to_hex(p.end_handle(i)) << ") :" << to_str(p.uuid(i)) << endl;
+				cerr << "debug: " <<  "[ " << to_hex(p.start_handle(i)) << ", " << to_hex(p.end_handle(i)) << ") :" << to_str(p.value(i)) << endl;
 		}
 		else
 			cerr << "debug: --no pretty printer available--\n";
@@ -371,23 +371,6 @@ struct SimpleBlockingATTDevice: public BLEDevice
 
 	}
 	
-	vector<tuple<uint16_t, uint16_t, bt_uuid_t>> read_by_group_type(const bt_uuid_t& uuid)
-	{
-		return read_multiple<tuple<uint16_t, uint16_t, bt_uuid_t>, PDUReadGroupByTypeResponse>(ATT_OP_READ_BY_GROUP_REQ, ATT_OP_READ_BY_GROUP_RESP, 
-			[&](int start, int end)
-			{
-				send_read_group_by_type(uuid, start, end);	
-			},
-			[](const PDUReadGroupByTypeResponse& p, int i)
-			{
-				return make_tuple(p.start_handle(i),  p.end_handle(i), p.uuid(i));
-			},
-			[](const PDUReadGroupByTypeResponse& p)
-			{
-				return p.end_handle(p.num_elements()-1);
-			});
-	}
-
 	
 	vector<pair<uint16_t, bt_uuid_t>> find_information()
 	{
@@ -441,6 +424,40 @@ class GATTReadCharacteristic: public  PDUReadByTypeResponse
 	}
 };
 
+///Interpret a read_group_by_type resoponde as a read service group response
+class GATTReadServiceGroup: public PDUReadGroupByTypeResponse
+{
+	public:
+	GATTReadServiceGroup(const PDUResponse& p)
+	:PDUReadGroupByTypeResponse(p)
+	{
+		if(value_size() != 2 && value_size() != 16)
+		{
+			LOG(Error, "UUID length" << value_size());
+			error<std::runtime_error>("Invalid UUID length in PDUReadGroupByTypeResponse");
+		}
+	}
+
+	bt_uuid_t uuid(int i) const
+	{
+		const uint8_t* begin = data + i*element_size() + 6;
+
+		bt_uuid_t uuid;
+		if(value_size() == 2)
+		{
+			uuid.type = BT_UUID16;
+			uuid.value.u16 = att_get_u16(begin);
+		}
+		else
+		{
+			uuid.type = BT_UUID128;
+			uuid.value.u128 = att_get_u128(begin);
+		}
+			
+		return uuid;
+	}
+};
+
 
 //This class layers the GATT profile on top of the ATT proticol
 //Provides higher level GATT specific meaning to attributes.
@@ -473,6 +490,24 @@ class SimpleBlockingGATTDevice: public SimpleBlockingATTDevice
 				return p.handle(p.num_elements()-1);
 			});
 	}
+
+	vector<tuple<uint16_t, uint16_t, bt_uuid_t>> read_service_group(const bt_uuid_t& uuid)
+	{
+		return read_multiple<tuple<uint16_t, uint16_t, bt_uuid_t>, GATTReadServiceGroup>(ATT_OP_READ_BY_GROUP_REQ, ATT_OP_READ_BY_GROUP_RESP, 
+			[&](int start, int end)
+			{
+				send_read_group_by_type(uuid, start, end);	
+			},
+			[](const GATTReadServiceGroup& p, int i)
+			{
+				return make_tuple(p.start_handle(i),  p.end_handle(i), p.uuid(i));
+			},
+			[](const GATTReadServiceGroup& p)
+			{
+				return p.end_handle(p.num_elements()-1);
+			});
+	}
+
 };
 
 
@@ -585,6 +620,27 @@ BLEDevice::BLEDevice(const std::string& address)
 
 LogLevels log_level;
 
+class Characteristic
+{	
+	public:
+		bool read, write, notify, indicate;
+		bt_uuid_t uuid;
+		uint16_t value_handle;
+
+
+};
+
+
+class Service
+{
+
+
+
+
+};
+
+
+
 int main(int argc, char **argv)
 {
 	if(argc != 2)
@@ -616,7 +672,7 @@ int main(int argc, char **argv)
 
 
 	cout << "Primary:\n";
-	auto s = b.read_by_group_type(uuid);
+	auto s = b.read_service_group(uuid);
 		
 	for(unsigned int i=0; i < s.size(); i++)
 	{
@@ -630,7 +686,7 @@ int main(int argc, char **argv)
 	auto r1 = b.read_characaristic();
 	for(const auto& i: r1)
 	{
-		cout << to_hex(i.first) << " Handle: " << to_hex(i.second.handle) << "  UUID: " << to_str(i.second.uuid)<<  " Flags: ";
+		cout << to_hex(i.first) << " Value handle: " << to_hex(i.second.handle) << "  UUID: " << to_str(i.second.uuid)<<  " Flags: ";
 		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_BROADCAST)
 			cout << "Broadcast ";
 		if(i.second.flags & GATT_CHARACTERISTIC_FLAGS_READ)
