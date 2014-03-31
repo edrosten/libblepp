@@ -38,6 +38,7 @@
 #include <cassert>
 #include <tuple>
 #include <stdexcept>
+#include <functional>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
@@ -623,21 +624,197 @@ LogLevels log_level;
 class Characteristic
 {	
 	public:
+
 		bool read, write, notify, indicate;
 		bt_uuid_t uuid;
 		uint16_t value_handle;
-
-
 };
 
 
 class Service
 {
+	uint16_t first_handle;
+	uint16_t last_handle;
+	bt_uuid_t uuid;
+	vector<Characteristic> characteristics;
+};
+
+class BLEGATTStateMachine;
+
+struct PrimaryService
+{
+	uint16_t start_handle;
+	uint16_t end_handle;
+	bt_uuid_t uuid;
+};
 
 
+enum  States
+{
+	Idle,
+	ReadingPrimaryService,
+	Reading
+};
+
+static const int Waiting=-1;
+
+
+class UUID: public bt_uuid_t
+{
+	public:
+
+	UUID(const uint16_t& u)
+	{
+		type = BT_UUID16;
+		value.u16 = u;
+	}
+
+};
+
+struct StateMachineGoneBad: public runtime_error
+{
+	StateMachineGoneBad(const std::string& err)
+	:runtime_error(err)
+	{
+	}
+};
+
+void buggerall(BLEGATTStateMachine&)
+{}
+
+class BLEGATTStateMachine
+{
+	private:
+
+
+	public:
+		BLEDevice dev;
+		
+		vector<PrimaryService> primary_services;
+
+		States state = Idle;
+		int next_handle_to_read=-1;
+		int last_request=-1;
+		
+		vector<uint8_t> buf;
+
+	public:
+
+		std::function<void(BLEGATTStateMachine&)> cb_connected = buggerall;
+		std::function<void(BLEGATTStateMachine&)> cb_services_read = buggerall;
+		std::function<void(BLEGATTStateMachine&)> cb_notify = buggerall;
+
+		BLEGATTStateMachine(const std::string& addr)
+		:dev(addr)
+		{
+			buf.resize(128);
+			cb_connected(*this);
+		}
+
+		int socket()
+		{
+			return dev.sock;
+		}
+		
+		void reset()
+		{
+			state = Idle;
+			next_handle_to_read=-1;
+			last_request=-1;
+		}
+
+		void state_machine_write()
+		{
+			if(state == ReadingPrimaryService)
+			{
+				last_request = ATT_OP_READ_BY_GROUP_REQ;	
+				dev.send_read_group_by_type(UUID(GATT_UUID_PRIMARY), next_handle_to_read, 0xffff);	
+			}
+
+		}
+
+		void read_primary_services()
+		{
+			state = ReadingPrimaryService;
+			next_handle_to_read=1;
+			state_machine_write();
+		}
+		
+
+		void read_and_process_next()
+		{
+			PDUResponse r = dev.receive(buf);
+
+			if(r.type() == ATT_OP_HANDLE_NOTIFY)
+				cb_notify(*this);
+			else if(r.type() == ATT_OP_ERROR && PDUErrorResponse(r).request_opcode() != last_request)
+			{
+				PDUErrorResponse err(r);
+				
+				std::string msg = string("Unexpected opcode in error. Expected ") + att_op2str(last_request) + " got "  + att_op2str(err.request_opcode());
+				LOG(Error, msg);
+				reset(); // And hope for the best
+				throw StateMachineGoneBad(msg);
+			}
+			else
+			{
+				if(state == ReadingPrimaryService)
+				{
+					if(r.type() == ATT_OP_ERROR)
+						if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
+						{
+							//Maybe ? Indicates that the last one has been read.
+							cb_services_read(*this);
+							reset();
+						}
+						else
+						{
+							PDUErrorResponse err(r);
+							string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
+							LOG(Error, msg);
+							reset(); // And hope for the best
+							throw StateMachineGoneBad(msg);
+						}
+					else if(r.type() != ATT_OP_READ_BY_GROUP_RESP)
+					{
+						string msg = string("Unexpected response. Expected ") + att_op2str(ATT_OP_READ_BY_GROUP_RESP) + " got "  + att_op2str(r.type());
+						LOG(Error, msg);
+						reset(); // And hope for the best
+						throw StateMachineGoneBad(msg);
+
+					}
+					else
+					{
+						GATTReadServiceGroup g(r);
+						
+						for(int i=0; i < g.num_elements(); i++)
+						{
+							struct PrimaryService service;
+							service.start_handle = g.start_handle(i);
+							service.end_handle   = g.end_handle(i);
+							service.uuid         = g.uuid(i);
+							primary_services.push_back(service);
+						}
+						
+
+						if(primary_services.back().end_handle == 0xffff)
+						{
+							reset();
+							cb_services_read(*this);
+						}
+						else
+						{
+							next_handle_to_read = primary_services.back().end_handle+1;
+							state_machine_write();
+						}
+					}
+				}
+			}
+		}
 
 
 };
+
 
 
 
@@ -649,9 +826,35 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	log_level = Warning;
+	log_level = Trace;
 	vector<uint8_t> buf(256);
 
+#if 0
+	BLEGATTStateMachine gatt(argv[1]);
+
+	
+	gatt.cb_services_read = [](BLEGATTStateMachine& s)
+	{
+		cout << "Primary services:\n";
+		for(auto service: s.primary_services)
+		{
+			cout << "Start: " << to_hex(service.start_handle);
+			cout << " End:  " << to_hex(service.end_handle);
+			cout << " UUID: " << to_str(service.uuid) << endl;
+		}
+
+		exit(0);
+	};
+
+
+	gatt.read_primary_services();
+
+	for(;;)
+		gatt.read_and_process_next();
+
+
+
+#else
 	SimpleBlockingGATTDevice b(argv[1]);
 	
 	bt_uuid_t uuid;
@@ -747,4 +950,7 @@ int main(int argc, char **argv)
 	b.send_read_group_by_type(uuid, 0x0013);
 	b.receive(buf);
 */
+
+	#endif
+
 }
