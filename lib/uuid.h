@@ -25,12 +25,15 @@
 #ifndef __BLUETOOTH_UUID_H
 #define __BLUETOOTH_UUID_H
 
+#include <stdint.h>
+#include <bluetooth/bluetooth.h>
+
 #ifdef __cplusplus
 extern "C" {
 #endif
 
 #include <stdint.h>
-#include <bluetooth/bluetooth.h>
+//#include <bluetooth/bluetooth.h>
 
 #define GENERIC_AUDIO_UUID	"00001203-0000-1000-8000-00805f9b34fb"
 

@@ -39,6 +39,7 @@
 #include <tuple>
 #include <stdexcept>
 #include <functional>
+#include <algorithm>
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
@@ -56,6 +57,7 @@ using namespace std;
 
 #define GATT_UUID_PRIMARY 0x2800
 #define GATT_CHARACTERISTIC 0x2803
+#define GATT_CLIENT_CHARACTERISTIC_CONFIGURATION 0x2802
 #define GATT_CHARACTERISTIC_FLAGS_BROADCAST     0x01
 #define GATT_CHARACTERISTIC_FLAGS_READ          0x02
 #define GATT_CHARACTERISTIC_FLAGS_WRITE_WITHOUT_RESPONSE 0x04
@@ -425,6 +427,25 @@ class GATTReadCharacteristic: public  PDUReadByTypeResponse
 	}
 };
 
+
+
+///Interpret a ReadByTypeResponse packet as a ReadCharacteristic packet
+class GATTReadCCC: public  PDUReadByTypeResponse
+{
+	public:
+
+	GATTReadCCC(const PDUResponse& p)
+	:PDUReadByTypeResponse(p)
+	{
+		if(value_size() != 2)
+			throw runtime_error("Invalid packet size in GATTReadCharacteristic");
+	}
+
+	uint16_t ccc_handle(int i) const
+	{
+		return att_get_u16(value(i).first);
+	}
+};
 ///Interpret a read_group_by_type resoponde as a read service group response
 class GATTReadServiceGroup: public PDUReadGroupByTypeResponse
 {
@@ -525,7 +546,7 @@ int haxx(uint8_t X)
 {
 	return X;
 }
-#define LOGVAR(X) LOG(Debug, #X << " = " << haxx(X))
+//#define LOGVAR(X) LOG(Debug, #X << " = " << haxx(X))
 #define LOGVAR(X) cerr << #X << " = " << haxx(X) << endl
 
 BLEDevice::BLEDevice(const std::string& address)
@@ -621,39 +642,14 @@ BLEDevice::BLEDevice(const std::string& address)
 
 LogLevels log_level;
 
-class Characteristic
-{	
-	public:
-
-		bool read, write, notify, indicate;
-		bt_uuid_t uuid;
-		uint16_t value_handle;
-};
-
-
-class Service
-{
-	uint16_t first_handle;
-	uint16_t last_handle;
-	bt_uuid_t uuid;
-	vector<Characteristic> characteristics;
-};
-
 class BLEGATTStateMachine;
-
-struct PrimaryService
-{
-	uint16_t start_handle;
-	uint16_t end_handle;
-	bt_uuid_t uuid;
-};
-
 
 enum  States
 {
 	Idle,
 	ReadingPrimaryService,
-	Reading
+	FindAllCharacteristics,
+	GetClientCharaceristicConfiguration,
 };
 
 static const int Waiting=-1;
@@ -663,12 +659,45 @@ class UUID: public bt_uuid_t
 {
 	public:
 
-	UUID(const uint16_t& u)
+	explicit UUID(const uint16_t& u)
 	{
 		type = BT_UUID16;
 		value.u16 = u;
 	}
+	
+	UUID(){}
 
+	UUID(const UUID&) = default;
+
+	static UUID from(const bt_uuid_t& uuid)
+	{
+		UUID ret;
+		(bt_uuid_t&)ret = uuid;
+
+		return ret;
+	}
+
+	bool operator==(const UUID& uuid) const
+	{
+		return bt_uuid_cmp(this, &uuid) == 0;
+	}
+};
+
+
+struct Characteristic
+{	
+	//Flags indicating various properties
+	bool broadcast, read, write_without_response, write, notify, indicate, authenticated_write, extended;
+
+	//UUID, i.e. name of what the characteristic represents semantically
+	UUID uuid;
+
+	//Where the value can be read/written
+	uint16_t value_handle;
+
+	//Where we write to configure, i.e. set notify and/or indicate
+	//0 means invalid.
+	uint16_t client_characteric_configuration;
 };
 
 struct StateMachineGoneBad: public runtime_error
@@ -679,13 +708,82 @@ struct StateMachineGoneBad: public runtime_error
 	}
 };
 
-void buggerall(BLEGATTStateMachine&)
-{}
+
+struct ServiceInfo
+{
+	string name, id;
+	UUID uuid;
+};
+
+struct PrimaryService
+{
+	uint16_t start_handle;
+	uint16_t end_handle;
+	UUID uuid;
+	vector<Characteristic> characteristics;
+};
+
+
+const ServiceInfo* lookup_service_by_UUID(const UUID& uuid)
+{
+	static vector<ServiceInfo> vec;
+
+	if(vec.size() == 0)
+	{
+		auto add = [](const char* n, const char* i, uint16_t u)
+		{
+			ServiceInfo s;
+			s.name=n;
+			s.id = i;
+			s.uuid = UUID(u);
+			vec.push_back(s);
+		};
+
+		add( "Alert Notification Service",    "org.bluetooth.service.alert_notification",        0x1811);
+		add( "Battery Service",               "org.bluetooth.service.battery_service",           0x180F);
+		add( "Blood Pressure",                "org.bluetooth.service.blood_pressure",            0x1810);
+		add( "Body Composition",              "org.bluetooth.service.body_composition",          0x181B);
+		add( "Bond Management",               "org.bluetooth.service.bond_management",           0x181E);
+		add( "Current Time Service",          "org.bluetooth.service.current_time",              0x1805);
+		add( "Cycling Power",                 "org.bluetooth.service.cycling_power",             0x1818);
+		add( "Cycling Speed and Cadence",     "org.bluetooth.service.cycling_speed_and_cadence", 0x1816);
+		add( "Device Information",            "org.bluetooth.service.device_information",        0x180A);
+		add( "Generic Access",                "org.bluetooth.service.generic_access",            0x1800);
+		add( "Generic Attribute",             "org.bluetooth.service.generic_attribute",         0x1801);
+		add( "Glucose",                       "org.bluetooth.service.glucose",                   0x1808);
+		add( "Health Thermometer",            "org.bluetooth.service.health_thermometer",        0x1809);
+		add( "Heart Rate",                    "org.bluetooth.service.heart_rate",                0x180D);
+		add( "Human Interface Device",        "org.bluetooth.service.human_interface_device",    0x1812);
+		add( "Immediate Alert",               "org.bluetooth.service.immediate_alert",           0x1802);
+		add( "Link Loss",                     "org.bluetooth.service.link_loss",                 0x1803);
+		add( "Location and Navigation",       "org.bluetooth.service.location_and_navigation",   0x1819);
+		add( "Next DST Change Service",       "org.bluetooth.service.next_dst_change",           0x1807);
+		add( "Phone Alert Status Service",    "org.bluetooth.service.phone_alert_status",        0x180E);
+		add( "Reference Time Update Service", "org.bluetooth.service.reference_time_update",     0x1806);
+		add( "Running Speed and Cadence",     "org.bluetooth.service.running_speed_and_cadence", 0x1814);
+		add( "Scan Parameters",               "org.bluetooth.service.scan_parameters",           0x1813);
+		add( "Tx Power",                      "org.bluetooth.service.tx_power",                  0x1804);
+		add( "User Data",                     "org.bluetooth.service.user_data",                 0x181C);
+		add( "Weight Scale",                  "org.bluetooth.service.weight_scale",              0x181D);
+	}
+
+	auto f = find_if(vec.begin(), vec.end(), [&](const ServiceInfo& s)
+	{
+		return s.uuid == uuid;
+	});
+
+	if(f == vec.end())
+		return 0;
+	else
+		return &*f;
+}
 
 class BLEGATTStateMachine
 {
 	private:
 
+		static void buggerall(BLEGATTStateMachine&)
+		{}
 
 	public:
 		BLEDevice dev;
@@ -698,11 +796,21 @@ class BLEGATTStateMachine
 		
 		vector<uint8_t> buf;
 
+
+		struct PrimaryServiceInfo
+		{
+			string name, id;
+			UUID uuid;
+		};
+
+
 	public:
 
 		std::function<void(BLEGATTStateMachine&)> cb_connected = buggerall;
 		std::function<void(BLEGATTStateMachine&)> cb_services_read = buggerall;
 		std::function<void(BLEGATTStateMachine&)> cb_notify = buggerall;
+		std::function<void(BLEGATTStateMachine&)> cb_find_characteristics = buggerall;
+		std::function<void(BLEGATTStateMachine&)> cb_get_client_characteristic_configuration = buggerall;
 
 		BLEGATTStateMachine(const std::string& addr)
 		:dev(addr)
@@ -730,6 +838,17 @@ class BLEGATTStateMachine
 				last_request = ATT_OP_READ_BY_GROUP_REQ;	
 				dev.send_read_group_by_type(UUID(GATT_UUID_PRIMARY), next_handle_to_read, 0xffff);	
 			}
+			else if(state == FindAllCharacteristics)
+			{
+				last_request = ATT_OP_READ_BY_TYPE_REQ;	
+				dev.send_read_by_type(UUID(GATT_CHARACTERISTIC), next_handle_to_read, 0xffff);	
+			}
+			else if(state == GetClientCharaceristicConfiguration)
+			{
+				last_request = ATT_OP_READ_BY_TYPE_REQ;	
+				dev.send_read_by_type(UUID(GATT_CLIENT_CHARACTERISTIC_CONFIGURATION), next_handle_to_read, 0xffff);	
+			}
+
 
 		}
 
@@ -739,7 +858,24 @@ class BLEGATTStateMachine
 			next_handle_to_read=1;
 			state_machine_write();
 		}
-		
+	
+		void find_all_characteristics()
+		{
+			if(state != Idle)
+				throw "Error trying to issue command mid state\n";
+			state = FindAllCharacteristics;
+			next_handle_to_read=1;
+			state_machine_write();
+		}
+
+		void get_client_characteristic_configuration()
+		{
+			if(state != Idle)
+				throw "Error trying to issue command mid state\n";
+			state = GetClientCharaceristicConfiguration;
+			next_handle_to_read=1;
+			state_machine_write();
+		}
 
 		void read_and_process_next()
 		{
@@ -756,11 +892,19 @@ class BLEGATTStateMachine
 				reset(); // And hope for the best
 				throw StateMachineGoneBad(msg);
 			}
+			else if(r.type() != ATT_OP_ERROR && r.type() != last_request + 1)
+			{
+				string msg = string("Unexpected response. Expected ") + att_op2str(last_request+1) + " got "  + att_op2str(r.type());
+				LOG(Error, msg);
+				reset(); // And hope for the best
+				throw StateMachineGoneBad(msg);
+			}
 			else
 			{
 				if(state == ReadingPrimaryService)
 				{
 					if(r.type() == ATT_OP_ERROR)
+					{
 						if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
 						{
 							//Maybe ? Indicates that the last one has been read.
@@ -775,13 +919,6 @@ class BLEGATTStateMachine
 							reset(); // And hope for the best
 							throw StateMachineGoneBad(msg);
 						}
-					else if(r.type() != ATT_OP_READ_BY_GROUP_RESP)
-					{
-						string msg = string("Unexpected response. Expected ") + att_op2str(ATT_OP_READ_BY_GROUP_RESP) + " got "  + att_op2str(r.type());
-						LOG(Error, msg);
-						reset(); // And hope for the best
-						throw StateMachineGoneBad(msg);
-
 					}
 					else
 					{
@@ -792,7 +929,7 @@ class BLEGATTStateMachine
 							struct PrimaryService service;
 							service.start_handle = g.start_handle(i);
 							service.end_handle   = g.end_handle(i);
-							service.uuid         = g.uuid(i);
+							service.uuid         = UUID::from(g.uuid(i));
 							primary_services.push_back(service);
 						}
 						
@@ -807,6 +944,99 @@ class BLEGATTStateMachine
 							next_handle_to_read = primary_services.back().end_handle+1;
 							state_machine_write();
 						}
+					}
+				}
+				else if(state == FindAllCharacteristics)
+				{
+					if(r.type() == ATT_OP_ERROR)
+					{
+						if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
+						{
+							//Maybe ? Indicates that the last one has been read.
+							reset();
+							cb_find_characteristics(*this);
+						}
+						else
+						{
+							PDUErrorResponse err(r);
+							string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
+							LOG(Error, msg);
+							reset(); // And hope for the best
+							throw StateMachineGoneBad(msg);
+						}
+					}
+					else
+					{
+						GATTReadCharacteristic rc(r);
+
+						for(int i=0; i < rc.num_elements(); i++)
+						{
+							uint16_t handle = rc.handle(i);
+							GATTReadCharacteristic::Characteristic ch = rc.characteristic(i);
+
+							LOG(Debug, "Found characteristic handle: " << to_hex(handle));
+
+							//Search for the correct service.
+							for(unsigned int s=0; s < primary_services.size(); s++)
+							{
+								if(handle > primary_services[s].start_handle && handle < primary_services[s].end_handle)
+								{
+									LOG(Debug, "  handle belongs to service " << s);
+									Characteristic c;
+
+
+									c.broadcast= ch.flags & GATT_CHARACTERISTIC_FLAGS_BROADCAST;
+									c.read     = ch.flags & GATT_CHARACTERISTIC_FLAGS_READ;
+									c.write_without_response= ch.flags & GATT_CHARACTERISTIC_FLAGS_WRITE_WITHOUT_RESPONSE;
+									c.write    = ch.flags & GATT_CHARACTERISTIC_FLAGS_WRITE;
+									c.notify   = ch.flags & GATT_CHARACTERISTIC_FLAGS_NOTIFY;
+									c.indicate = ch.flags & GATT_CHARACTERISTIC_FLAGS_INDICATE;
+									c.authenticated_write = ch.flags & GATT_CHARACTERISTIC_FLAGS_AUTHENTICATED_SIGNED_WRITES;
+									c.extended = ch.flags & GATT_CHARACTERISTIC_FLAGS_EXTENDED_PROPERTIES;
+									c.uuid     = UUID::from(ch.uuid);
+									c.value_handle = ch.handle;
+									c.client_characteric_configuration = 0;
+									primary_services[i].characteristics.push_back(c);
+
+								}
+							}
+
+							next_handle_to_read = handle+1;
+						}
+						LOG(Debug,  "Reading " << to_hex((uint16_t)next_handle_to_read) << " next");
+						state_machine_write();
+					}
+				}
+				else if(state == GetClientCharaceristicConfiguration)
+				{
+					if(r.type() == ATT_OP_ERROR)
+					{
+						if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
+						{
+							//Maybe ? Indicates that the last one has been read.
+							reset();
+							cb_find_characteristics(*this);
+						}
+						else
+						{
+							PDUErrorResponse err(r);
+							string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
+							LOG(Error, msg);
+							reset(); // And hope for the best
+							throw StateMachineGoneBad(msg);
+						}
+					}
+					else
+					{
+					FIXME this if br0ken
+						GATTReadCCC rc(r);
+						next_handle_to_read = rc.handle;
+
+						for(int i=0; i < rc.num_elements(); i++)
+						{
+							
+						}
+						state_machine_write();
 					}
 				}
 			}
@@ -829,32 +1059,86 @@ int main(int argc, char **argv)
 	log_level = Trace;
 	vector<uint8_t> buf(256);
 
-#if 0
+#if 1
 	BLEGATTStateMachine gatt(argv[1]);
 
+	log_level = Error;
 	
 	gatt.cb_services_read = [](BLEGATTStateMachine& s)
 	{
+		cout << "Services read. \n";
+		s.find_all_characteristics();
+	};
+
+
+	gatt.cb_find_characteristics = [](BLEGATTStateMachine& s)
+	{
+
 		cout << "Primary services:\n";
 		for(auto service: s.primary_services)
 		{
 			cout << "Start: " << to_hex(service.start_handle);
 			cout << " End:  " << to_hex(service.end_handle);
 			cout << " UUID: " << to_str(service.uuid) << endl;
+			const ServiceInfo* s = lookup_service_by_UUID(UUID::from(service.uuid));
+			if(s)
+				cout << "  " << s->id << ": " << s->name << endl;
+			else
+				cout << "  Unknown\n";
+
+
+			for(auto characteristic: service.characteristics)
+			{
+				cout  << "  Characteristic: " << to_str(characteristic.uuid) << endl;
+				
+				cout << "   Flags: ";
+				if(characteristic.broadcast)
+					cout << "Broadcast ";
+				if(characteristic.read)
+					cout << "Read ";
+				if(characteristic.write_without_response)
+					cout << "Write (without response) ";
+				if(characteristic.write)
+					cout << "Write ";
+				if(characteristic.notify)
+					cout << "Notify ";
+				if(characteristic.indicate)
+					cout << "Indicate ";
+				if(characteristic.authenticated_write)
+					cout << "Authenticated signed writes ";
+				if(characteristic.extended)
+					cout << "Extended properties ";
+				cout  << endl;
+
+				cout << "   Value at handle: " << characteristic.value_handle << endl;
+				cout << endl;
+
+
+			}
+			cout << endl;
 		}
 
-		exit(0);
+		s.get_client_characteristic_configuration();
 	};
 
 
 	gatt.read_primary_services();
+	
+	try{
+		while(gatt.state != Idle)
+			gatt.read_and_process_next();
+	}
+	catch(const char* err)
+	{
+		cerr << "Fuck: " << err << endl;
+	}
 
-	for(;;)
-		gatt.read_and_process_next();
+	
 
 
+#endif
 
-#else
+#if 0
 	SimpleBlockingGATTDevice b(argv[1]);
 	
 	bt_uuid_t uuid;
