@@ -1193,6 +1193,59 @@ void Characteristic::set_notify_and_indicate(bool notify, bool indicate)
 }
 
 
+void pretty_print_tree(const BLEGATTStateMachine& s)
+{
+
+	cout << "Primary services:\n";
+	for(auto& service: s.primary_services)
+	{
+		cout << "Start: " << to_hex(service.start_handle);
+		cout << " End:  " << to_hex(service.end_handle);
+		cout << " UUID: " << to_str(service.uuid) << endl;
+		const ServiceInfo* s = lookup_service_by_UUID(UUID::from(service.uuid));
+		if(s)
+			cout << "  " << s->id << ": " << s->name << endl;
+		else
+			cout << "  Unknown\n";
+
+
+		for(auto& characteristic: service.characteristics)
+		{
+			cout  << "  Characteristic: " << to_str(characteristic.uuid) << endl;
+			cout  << "   Start: " << to_hex(characteristic.first_handle) << "  End: " << to_hex(characteristic.last_handle) << endl;
+
+			cout << "   Flags: ";
+			if(characteristic.broadcast)
+				cout << "Broadcast ";
+			if(characteristic.read)
+				cout << "Read ";
+			if(characteristic.write_without_response)
+				cout << "Write (without response) ";
+			if(characteristic.write)
+				cout << "Write ";
+			if(characteristic.notify)
+				cout << "Notify ";
+			if(characteristic.indicate)
+				cout << "Indicate ";
+			if(characteristic.authenticated_write)
+				cout << "Authenticated signed writes ";
+			if(characteristic.extended)
+				cout << "Extended properties ";
+			cout  << endl;
+
+			cout << "   Value at handle: " << characteristic.value_handle << endl;
+
+			if(characteristic.client_characteric_configuration_handle != 0)
+				cout << "   CCC: (" << to_hex(characteristic.client_characteric_configuration_handle) << ") " << to_hex(characteristic.ccc_last_known_value) << endl;
+
+			cout << endl;
+
+		}
+
+		cout << endl;
+	}
+}
+
 
 int main(int argc, char **argv)
 {
@@ -1211,7 +1264,6 @@ int main(int argc, char **argv)
 	
 	gatt.cb_services_read = [](BLEGATTStateMachine& s)
 	{
-		cout << "Services read. \n";
 		s.find_all_characteristics();
 	};
 
@@ -1223,50 +1275,8 @@ int main(int argc, char **argv)
 
 	gatt.cb_get_client_characteristic_configuration = [](BLEGATTStateMachine& s)
 	{
-		cout << "Primary services:\n";
 		for(auto& service: s.primary_services)
-		{
-			cout << "Start: " << to_hex(service.start_handle);
-			cout << " End:  " << to_hex(service.end_handle);
-			cout << " UUID: " << to_str(service.uuid) << endl;
-			const ServiceInfo* s = lookup_service_by_UUID(UUID::from(service.uuid));
-			if(s)
-				cout << "  " << s->id << ": " << s->name << endl;
-			else
-				cout << "  Unknown\n";
-
-
 			for(auto& characteristic: service.characteristics)
-			{
-				cout  << "  Characteristic: " << to_str(characteristic.uuid) << endl;
-				cout  << "   Start: " << to_hex(characteristic.first_handle) << "  End: " << to_hex(characteristic.last_handle) << endl;
-				
-				cout << "   Flags: ";
-				if(characteristic.broadcast)
-					cout << "Broadcast ";
-				if(characteristic.read)
-					cout << "Read ";
-				if(characteristic.write_without_response)
-					cout << "Write (without response) ";
-				if(characteristic.write)
-					cout << "Write ";
-				if(characteristic.notify)
-					cout << "Notify ";
-				if(characteristic.indicate)
-					cout << "Indicate ";
-				if(characteristic.authenticated_write)
-					cout << "Authenticated signed writes ";
-				if(characteristic.extended)
-					cout << "Extended properties ";
-				cout  << endl;
-
-				cout << "   Value at handle: " << characteristic.value_handle << endl;
-
-				if(characteristic.client_characteric_configuration_handle != 0)
-					cout << "   CCC: (" << to_hex(characteristic.client_characteric_configuration_handle) << ") " << to_hex(characteristic.ccc_last_known_value) << endl;
-
-				cout << endl;
-
 				if(service.uuid == UUID(0x1809) && characteristic.uuid == UUID(0x2a1c))
 				{
 					characteristic.cb_notify_or_indicate = [](const PDUNotificationOrIndication& n)
@@ -1277,11 +1287,6 @@ int main(int argc, char **argv)
 
 					characteristic.set_notify_and_indicate(false, true);
 				}
-						
-			}
-			cout << endl;
-		}
-	
 	};
 
 
