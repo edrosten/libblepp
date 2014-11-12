@@ -47,9 +47,10 @@
 #include <utility>
 
 extern "C" {
-	#include "att.h"
+	#include <libattgatt/att.h>
 }
-#include "logging.h"
+
+#include <libattgatt/logging.h>
 
 /* Basic PDU response as in 3.F.3.3.1 */
 class PDUResponse
@@ -330,4 +331,9 @@ class PDUNotificationOrIndication: public PDUResponse
 			return std::make_pair(data + 3, data + length);
 		}
 };
+
+void pretty_print(const PDUResponse& pdu);
+
+
+
 #endif

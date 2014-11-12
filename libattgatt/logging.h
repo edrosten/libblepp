@@ -27,11 +27,11 @@
 */
 
 
-#ifndef INCLUDE_LOGGING_H
-#define INCLUDE_LOGGING_H
+#ifndef __INC_LIBATTGATT_LOGGING_H
+#define __INC_LIBATTGATT_LOGGING_H
 #include <iostream>
 #include <sstream>
-#include "xtoa.h"
+#include <libattgatt/xtoa.h>
 
 enum LogLevels
 {

@@ -1,6 +1,6 @@
-CXXFLAGS+=-std=c++11 -Wall -Wextra -g -ggdb
+CXXFLAGS+=-std=c++11 -Wall -Wextra -g -ggdb -I . 
+CFLAGS+= -Wall -Wextra -g -ggdb -I . 
 
-prog: bluetooth.o att.o lib/uuid.o
+prog: bluetooth.o src/att.o lib/uuid.o src/logging.o src/bledevice.o src/att_pdu.o
 	$(CXX) -o $@ $^ -lbluetooth
 
-bluetooth.o:att.h att_pdu.h bluetooth.cc
