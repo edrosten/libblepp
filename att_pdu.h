@@ -72,7 +72,7 @@ class PDUResponse
 	public:
 
 		const uint8_t* data; //Pointer to the underlying data
-		int length;          //Length og the underlying data
+		int length;          //Length of the underlying data
 
 		//Utility function to return a uint8 at byte offset i;
 		uint8_t uint8(int i) const
@@ -297,4 +297,37 @@ class PDUFindInformationResponse: public PDUResponse
 		}
 };
 
+class PDUNotificationOrIndication: public PDUResponse
+{
+	public:
+
+		PDUNotificationOrIndication(const PDUResponse& p_)
+		:PDUResponse(p_)
+		{
+			if(type() != ATT_OP_HANDLE_NOTIFY && type() != ATT_OP_HANDLE_IND)
+				error<std::logic_error>(std::string("Error converting PDUResponse to NotifyOrIndicate. Type is ") + att_op2str(type()));
+		}
+
+		bool notification() const
+		{
+			return type() == ATT_OP_HANDLE_NOTIFY;
+
+		};
+
+		int num_elements() const
+		{
+			return (length - 2);
+		}
+
+		uint16_t handle() const
+		{
+			return uint16(1);
+		}
+
+		//Return pointer span of the ith chunk of data
+		std::pair<const uint8_t*, const uint8_t*> value() const
+		{
+			return std::make_pair(data + 3, data + length);
+		}
+};
 #endif

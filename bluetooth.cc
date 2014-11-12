@@ -57,7 +57,7 @@ using namespace std;
 
 #define GATT_UUID_PRIMARY 0x2800
 #define GATT_CHARACTERISTIC 0x2803
-#define GATT_CLIENT_CHARACTERISTIC_CONFIGURATION 0x2802
+#define GATT_CLIENT_CHARACTERISTIC_CONFIGURATION 0x2902
 #define GATT_CHARACTERISTIC_FLAGS_BROADCAST     0x01
 #define GATT_CHARACTERISTIC_FLAGS_READ          0x02
 #define GATT_CHARACTERISTIC_FLAGS_WRITE_WITHOUT_RESPONSE 0x04
@@ -200,6 +200,9 @@ void pretty_print(const PDUResponse& pdu)
 			for(int i=0; i < p.num_elements(); i++)
 				cerr << "debug: " <<  "[ " << to_hex(p.start_handle(i)) << ", " << to_hex(p.end_handle(i)) << ") :" << to_str(p.value(i)) << endl;
 		}
+		else if(pdu.type() == ATT_OP_WRITE_RESP)
+		{
+		}
 		else
 			cerr << "debug: --no pretty printer available--\n";
 		
@@ -275,6 +278,50 @@ struct BLEDevice
 		int ret = write(sock, buf.data(), len);
 		test(ret);
 	}
+
+	void send_write_request(uint16_t handle, const uint8_t* data, int length)
+	{
+		vector<uint8_t> buf(buflen);
+		int len = enc_write_req(handle, data, length, buf.data(), buf.size());
+		test_pdu(len);
+		int ret = write(sock, buf.data(), len);
+		test(ret);
+	}
+
+	void send_write_request(uint16_t handle, uint16_t data)
+	{
+		const uint8_t buf[2] = { (uint8_t)(data & 0xff), (uint8_t)((data & 0xff00) >> 8)};
+		send_write_request(handle, buf, 2);
+	}
+
+	void send_handle_value_confirmation()
+	{
+		vector<uint8_t> buf(buflen);
+		int len = enc_confirmation(buf.data(), buf.size());
+		test_pdu(len);
+		int ret = write(sock, buf.data(), len);
+		test(ret);
+	}
+
+	void send_write_command(uint16_t handle, const uint8_t* data, int length)
+	{
+		vector<uint8_t> buf(buflen);
+		int len = enc_write_cmd(handle, data, length, buf.data(), buf.size());
+		test_pdu(len);
+		int ret = write(sock, buf.data(), len);
+		test(ret);
+	}
+
+	void send_write_command(uint16_t handle, uint16_t data)
+	{
+		const uint8_t buf[2] = { (uint8_t)(data & 0xff), (uint8_t)((data & 0xff00) >> 8)};
+		send_write_command(handle, buf, 2);
+	}
+
+
+
+
+
 
 	PDUResponse receive(uint8_t* buf, int max)
 	{
@@ -441,7 +488,7 @@ class GATTReadCCC: public  PDUReadByTypeResponse
 			throw runtime_error("Invalid packet size in GATTReadCharacteristic");
 	}
 
-	uint16_t ccc_handle(int i) const
+	uint16_t ccc(int i) const
 	{
 		return att_get_u16(value(i).first);
 	}
@@ -650,6 +697,7 @@ enum  States
 	ReadingPrimaryService,
 	FindAllCharacteristics,
 	GetClientCharaceristicConfiguration,
+	AwaitingWriteResponse,
 };
 
 static const int Waiting=-1;
@@ -686,6 +734,18 @@ class UUID: public bt_uuid_t
 
 struct Characteristic
 {	
+	private:
+	BLEGATTStateMachine* s;
+
+	public:
+
+	Characteristic(BLEGATTStateMachine* s_)
+	:s(s_)
+	{}
+
+	void set_notify_and_indicate(bool , bool);
+	std::function<void(const PDUNotificationOrIndication&)> cb_notify_or_indicate;
+
 	//Flags indicating various properties
 	bool broadcast, read, write_without_response, write, notify, indicate, authenticated_write, extended;
 
@@ -697,7 +757,10 @@ struct Characteristic
 
 	//Where we write to configure, i.e. set notify and/or indicate
 	//0 means invalid.
-	uint16_t client_characteric_configuration;
+	uint16_t client_characteric_configuration_handle;
+	uint16_t ccc_last_known_value;
+	
+	uint16_t first_handle, last_handle;
 };
 
 struct StateMachineGoneBad: public runtime_error
@@ -811,6 +874,9 @@ class BLEGATTStateMachine
 		std::function<void(BLEGATTStateMachine&)> cb_notify = buggerall;
 		std::function<void(BLEGATTStateMachine&)> cb_find_characteristics = buggerall;
 		std::function<void(BLEGATTStateMachine&)> cb_get_client_characteristic_configuration = buggerall;
+		std::function<void(BLEGATTStateMachine&)> cb_write_response = buggerall;
+		std::function<void(Characteristic&, const PDUNotificationOrIndication&)> cb_notify_or_indicate;
+
 
 		BLEGATTStateMachine(const std::string& addr)
 		:dev(addr)
@@ -879,10 +945,28 @@ class BLEGATTStateMachine
 
 		void read_and_process_next()
 		{
+			LOG(Debug, "State is: " << state);
 			PDUResponse r = dev.receive(buf);
 
-			if(r.type() == ATT_OP_HANDLE_NOTIFY)
-				cb_notify(*this);
+			if(r.type() == ATT_OP_HANDLE_NOTIFY || r.type() == ATT_OP_HANDLE_IND)
+			{
+				PDUNotificationOrIndication n(r);
+				//Find the correct characteristic
+				for(auto& s:primary_services)
+					if(n.handle() > s.start_handle && n.handle() <= s.end_handle)
+						for(auto& c:s.characteristics)
+							if(n.handle() == c.value_handle)
+							{
+								if(c.cb_notify_or_indicate)
+									c.cb_notify_or_indicate(n);
+								else
+									cb_notify_or_indicate(c, n);
+							}
+				
+				//Respond to indications after the callback has run
+				if(!n.notification())
+					dev.send_handle_value_confirmation();
+			}
 			else if(r.type() == ATT_OP_ERROR && PDUErrorResponse(r).request_opcode() != last_request)
 			{
 				PDUErrorResponse err(r);
@@ -979,10 +1063,10 @@ class BLEGATTStateMachine
 							//Search for the correct service.
 							for(unsigned int s=0; s < primary_services.size(); s++)
 							{
-								if(handle > primary_services[s].start_handle && handle < primary_services[s].end_handle)
+								if(handle > primary_services[s].start_handle && handle <= primary_services[s].end_handle)
 								{
 									LOG(Debug, "  handle belongs to service " << s);
-									Characteristic c;
+									Characteristic c(this);
 
 
 									c.broadcast= ch.flags & GATT_CHARACTERISTIC_FLAGS_BROADCAST;
@@ -995,8 +1079,19 @@ class BLEGATTStateMachine
 									c.extended = ch.flags & GATT_CHARACTERISTIC_FLAGS_EXTENDED_PROPERTIES;
 									c.uuid     = UUID::from(ch.uuid);
 									c.value_handle = ch.handle;
-									c.client_characteric_configuration = 0;
-									primary_services[i].characteristics.push_back(c);
+									c.client_characteric_configuration_handle = 0;
+									c.first_handle = handle;
+									
+									//Initially mark the end as the start of the current service
+									c.last_handle = primary_services[s].end_handle;
+
+									//Terminate the previous characteristic
+									if(!primary_services[s].characteristics.empty())
+										primary_services[s].characteristics.back().last_handle = handle-1;
+									
+									primary_services[s].characteristics.push_back(c);
+
+
 
 								}
 							}
@@ -1015,7 +1110,7 @@ class BLEGATTStateMachine
 						{
 							//Maybe ? Indicates that the last one has been read.
 							reset();
-							cb_find_characteristics(*this);
+							cb_get_client_characteristic_configuration(*this);
 						}
 						else
 						{
@@ -1028,23 +1123,74 @@ class BLEGATTStateMachine
 					}
 					else
 					{
-					FIXME this if br0ken
 						GATTReadCCC rc(r);
-						next_handle_to_read = rc.handle;
 
 						for(int i=0; i < rc.num_elements(); i++)
 						{
-							
+							uint16_t handle = rc.handle(i);
+							next_handle_to_read = handle + 1;
+							LOG(Debug, "Handle: " << to_hex(rc.handle(i)) << "  ccc: " << to_hex(rc.ccc(i)));
+
+
+							//Find the correct place
+							for(auto& s:primary_services)
+								if(handle > s.start_handle && handle <= s.end_handle)
+									for(auto& c:s.characteristics)
+										if(handle > c.first_handle && handle <= c.last_handle)
+										{
+											c.client_characteric_configuration_handle = rc.handle(i);
+											c.ccc_last_known_value = rc.ccc(i);
+										}
+										
 						}
 						state_machine_write();
+					}
+				}
+				else if(state == AwaitingWriteResponse)
+				{
+
+					if(r.type() == ATT_OP_ERROR)
+					{
+						PDUErrorResponse err(r);
+						string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
+						LOG(Error, msg);
+						throw StateMachineGoneBad(msg);
+					}
+					else
+					{
+						reset();
+						cb_write_response(*this);
 					}
 				}
 			}
 		}
 
+		
 
+		void set_notify_and_indicate(Characteristic& c, bool notify, bool indicate)
+		{
+			LOG(Trace, "BLEGATTStateMachine::enable_indications(Characteristic&)");
+
+			if(state != Idle)
+				throw "Error trying to issue command mid state\n";
+			
+			if(!c.indicate && indicate)
+				throw("Error: this is not indicateable");
+			if(!c.notify && notify)
+				throw("Error: this is not notifiable");
+
+			//FIXME: check for CCC
+			c.ccc_last_known_value = notify | (indicate << 1);
+			dev.send_write_command(c.client_characteric_configuration_handle, c.ccc_last_known_value);
+		}
 };
 
+
+void Characteristic::set_notify_and_indicate(bool notify, bool indicate)
+{
+	LOG(Trace, "Characteristic::enable_indications()");
+	s->set_notify_and_indicate(*this, notify, indicate);
+}
 
 
 
@@ -1056,13 +1202,12 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	log_level = Trace;
+	log_level = Warning;
 	vector<uint8_t> buf(256);
 
 #if 1
 	BLEGATTStateMachine gatt(argv[1]);
 
-	log_level = Error;
 	
 	gatt.cb_services_read = [](BLEGATTStateMachine& s)
 	{
@@ -1073,9 +1218,13 @@ int main(int argc, char **argv)
 
 	gatt.cb_find_characteristics = [](BLEGATTStateMachine& s)
 	{
+		s.get_client_characteristic_configuration();
+	};
 
+	gatt.cb_get_client_characteristic_configuration = [](BLEGATTStateMachine& s)
+	{
 		cout << "Primary services:\n";
-		for(auto service: s.primary_services)
+		for(auto& service: s.primary_services)
 		{
 			cout << "Start: " << to_hex(service.start_handle);
 			cout << " End:  " << to_hex(service.end_handle);
@@ -1087,9 +1236,10 @@ int main(int argc, char **argv)
 				cout << "  Unknown\n";
 
 
-			for(auto characteristic: service.characteristics)
+			for(auto& characteristic: service.characteristics)
 			{
 				cout  << "  Characteristic: " << to_str(characteristic.uuid) << endl;
+				cout  << "   Start: " << to_hex(characteristic.first_handle) << "  End: " << to_hex(characteristic.last_handle) << endl;
 				
 				cout << "   Flags: ";
 				if(characteristic.broadcast)
@@ -1111,22 +1261,37 @@ int main(int argc, char **argv)
 				cout  << endl;
 
 				cout << "   Value at handle: " << characteristic.value_handle << endl;
+
+				if(characteristic.client_characteric_configuration_handle != 0)
+					cout << "   CCC: (" << to_hex(characteristic.client_characteric_configuration_handle) << ") " << to_hex(characteristic.ccc_last_known_value) << endl;
+
 				cout << endl;
 
+				if(service.uuid == UUID(0x1809) && characteristic.uuid == UUID(0x2a1c))
+				{
+					characteristic.cb_notify_or_indicate = [](const PDUNotificationOrIndication& n)
+					{
+						cerr << "Hello: " << (float)n.value().first[1] / 10. << endl;
 
+					};
+
+					characteristic.set_notify_and_indicate(false, true);
+				}
+						
 			}
 			cout << endl;
 		}
-
-		s.get_client_characteristic_configuration();
+	
 	};
 
 
 	gatt.read_primary_services();
 	
 	try{
-		while(gatt.state != Idle)
+		for(;;)
+		{
 			gatt.read_and_process_next();
+		}
 	}
 	catch(const char* err)
 	{

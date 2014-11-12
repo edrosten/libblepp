@@ -149,17 +149,19 @@ const char* att_op2str(uint8_t op)
 		case ATT_OP_READ_BY_GROUP_RESP:
 			return "Read By Group Response";
 		case ATT_OP_WRITE_REQ:
-			return "Read Write Request";
+			return "Write Request";
 		case ATT_OP_WRITE_RESP:
-			return "Read Write Response";
+			return "Write Request Response";
 		case ATT_OP_WRITE_CMD:
-			return "Read Write Command";
+			return "Write Command";
+		case ATT_OP_HANDLE_NOTIFY:
+			return "Notify";
+		case ATT_OP_HANDLE_IND:
+			return "Indicate";
 		case ATT_OP_PREP_WRITE_REQ:
 		case ATT_OP_PREP_WRITE_RESP:
 		case ATT_OP_EXEC_WRITE_REQ:
 		case ATT_OP_EXEC_WRITE_RESP:
-		case ATT_OP_HANDLE_NOTIFY:
-		case ATT_OP_HANDLE_IND:
 		case ATT_OP_HANDLE_CNF:
 		case ATT_OP_SIGNED_WRITE_CMD:
 			return "haha fill me in :)";
