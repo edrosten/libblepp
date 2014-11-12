@@ -22,7 +22,7 @@ static int haxx(uint8_t X)
 	return X;
 }
 //#define LOGVAR(X) LOG(Debug, #X << " = " << haxx(X))
-#define LOGVAR(X) cerr << #X << " = " << haxx(X) << endl
+#define LOGVAR(X) LOG(Info,  #X << " = " << haxx(X))
 
 
 #define test(X) test_fd_(X, __LINE__)
@@ -219,5 +219,5 @@ BLEDevice::BLEDevice(const std::string& address)
 	LOGVAR(options.max_tx);
 	LOGVAR(options.txwin_size);
 
-
+	buf.resize(ATT_DEFAULT_MTU);
 }

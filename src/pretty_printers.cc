@@ -6,14 +6,14 @@ using namespace std;
 
 std::string to_hex(const std::uint16_t& u)
 {
-	ostd::stringstream os;
+	stringstream os;
 	os << setw(4) << setfill('0') << hex << u;
 	return os.str();
 }
 
 std::string to_hex(const std::uint8_t& u)
 {
-	ostd::stringstream os;
+	stringstream os;
 	os << setw(2) << setfill('0') << hex << (int)u;
 	return os.str();
 }
@@ -43,7 +43,7 @@ std::string to_str(const bt_uuid_t& uuid)
 
 std::string to_hex(const std::uint8_t* d, int l)
 {
-	ostd::stringstream os;
+	stringstream os;
 	for(int i=0; i < l; i++)
 		os << to_hex(d[i]) << " ";
 	return os.str();
@@ -60,7 +60,7 @@ std::string to_hex(const vector<std::uint8_t>& v)
 
 std::string to_str(const std::uint8_t* d, int l)
 {
-	ostd::stringstream os;
+	stringstream os;
 	for(int i=0; i < l; i++)
 		os << to_str(d[i]);
 	return os.str();
