@@ -20,25 +20,10 @@
  *
  */
 
-
 #include <iostream>
-#include <cstdlib>
-#include <cstring>
-#include <cerrno>
-#include <vector>
-#include <sstream>
-#include <iomanip>
-#include <cassert>
-#include <tuple>
-#include <stdexcept>
-#include <functional>
-#include <algorithm>
-
-#include  <libattgatt/logging.h>
-#include  <libattgatt/bledevice.h>
-#include <libattgatt/att_pdu.h>
-#include <libattgatt/pretty_printers.h>
+#include <iostream>
 #include <libattgatt/blestatemachine.h>
+#include <libattgatt/float.h>
 using namespace std;
 
 int main(int argc, char **argv)
@@ -62,11 +47,14 @@ int main(int argc, char **argv)
 					characteristic.cb_notify_or_indicate = [](const PDUNotificationOrIndication& n)
 					{
 						//cerr << "Hello: "  << ((n.value().first[0] + (n.value().first[1]<<8))>>4) << endl;
-						cerr << "Hello: "  << hex  << setfill('0') << setw(4) << ((0+n.value().first[1] *256 + n.value().first[0])>>0) << dec << endl;
+						//cerr << "Hello: "  << hex  << setfill('0') << setw(4) << ((0+n.value().first[1] *256 + n.value().first[0])>>0) << dec << endl;
+							
+						cout << "Flags: " << to_hex(n.value().first[0]) << " Temperature: " << bluetooth_float_to_IEEE754(n.value().first+1) << endl;
+
 
 					};
 
-					characteristic.set_notify_and_indicate(true, false);
+					characteristic.set_notify_and_indicate(false, true);
 				}
 	};
 
