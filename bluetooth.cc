@@ -43,7 +43,6 @@
 
 #include  <libattgatt/logging.h>
 #include  <libattgatt/bledevice.h>
-#include "lib/uuid.h"
 #include <libattgatt/att_pdu.h>
 #include <libattgatt/pretty_printers.h>
 #include <libattgatt/blestatemachine.h>
@@ -62,21 +61,8 @@ int main(int argc, char **argv)
 
 	BLEGATTStateMachine gatt(argv[1]);
 
-	
-	gatt.cb_services_read = [](BLEGATTStateMachine& s)
-	{
-		s.find_all_characteristics();
-	};
-
-
-	gatt.cb_find_characteristics = [](BLEGATTStateMachine& s)
-	{
-		s.get_client_characteristic_configuration();
-	};
-
-	gatt.cb_get_client_characteristic_configuration = [](BLEGATTStateMachine& s)
-	{
-		for(auto& service: s.primary_services)
+	std::function<void()> cb = [&gatt](){
+		for(auto& service: gatt.primary_services)
 			for(auto& characteristic: service.characteristics)
 				if(service.uuid == UUID(0x1809) && characteristic.uuid == UUID(0x2a1c))
 				{
@@ -91,9 +77,8 @@ int main(int argc, char **argv)
 				}
 	};
 
+	gatt.do_standard_scan(cb);
 
-	gatt.read_primary_services();
-	
 	try{
 		for(;;)
 		{
@@ -102,6 +87,6 @@ int main(int argc, char **argv)
 	}
 	catch(const char* err)
 	{
-		cerr << "Fuck: " << err << endl;
+		cerr << "Oh dear: " << err << endl;
 	}
 }

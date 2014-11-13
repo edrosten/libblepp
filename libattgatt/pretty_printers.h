@@ -1,7 +1,7 @@
 #ifndef __INC_LIBATTGATT_PRETTY_PRINTERS_H
 #define __INC_LIBATTGATT_PRETTY_PRINTERS_H
 
-#include "lib/uuid.h"
+#include <libattgatt/uuid.h>
 
 #include <cstdint>
 #include <utility>

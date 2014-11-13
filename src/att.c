@@ -57,7 +57,7 @@
 
 #include <bluetooth/bluetooth.h>
 
-#include "lib/uuid.h"
+#include <libattgatt/uuid.h>
 #include <libattgatt/att.h>
 
 #define MIN(A, B) (((A)<(B))?(A):(B))

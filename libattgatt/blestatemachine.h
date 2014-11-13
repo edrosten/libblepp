@@ -44,7 +44,6 @@
 
 #include  <libattgatt/logging.h>
 #include  <libattgatt/bledevice.h>
-#include "lib/uuid.h"
 #include <libattgatt/att_pdu.h>
 #include <libattgatt/pretty_printers.h>
 using namespace std;
@@ -241,7 +240,7 @@ class BLEGATTStateMachine
 {
 	private:
 
-		static void buggerall(BLEGATTStateMachine&);
+		static void buggerall();
 
 		BLEDevice dev;
 		
@@ -266,12 +265,12 @@ class BLEGATTStateMachine
 
 		std::vector<PrimaryService> primary_services;
 
-		std::function<void(BLEGATTStateMachine&)> cb_connected = buggerall;
-		std::function<void(BLEGATTStateMachine&)> cb_services_read = buggerall;
-		std::function<void(BLEGATTStateMachine&)> cb_notify = buggerall;
-		std::function<void(BLEGATTStateMachine&)> cb_find_characteristics = buggerall;
-		std::function<void(BLEGATTStateMachine&)> cb_get_client_characteristic_configuration = buggerall;
-		std::function<void(BLEGATTStateMachine&)> cb_write_response = buggerall;
+		std::function<void()> cb_connected = buggerall;
+		std::function<void()> cb_services_read = buggerall;
+		std::function<void()> cb_notify = buggerall;
+		std::function<void()> cb_find_characteristics = buggerall;
+		std::function<void()> cb_get_client_characteristic_configuration = buggerall;
+		std::function<void()> cb_write_response = buggerall;
 		std::function<void(Characteristic&, const PDUNotificationOrIndication&)> cb_notify_or_indicate;
 
 
@@ -285,9 +284,10 @@ class BLEGATTStateMachine
 		void find_all_characteristics();
 		void get_client_characteristic_configuration();
 		void read_and_process_next();
-		
-
 		void set_notify_and_indicate(Characteristic& c, bool notify, bool indicate);
+
+
+		void do_standard_scan(std::function<void()>& cb);
 };
 
 

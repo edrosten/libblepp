@@ -50,7 +50,7 @@
  *
  */
 
-#include "lib/uuid.h"
+#include <libattgatt/uuid.h>
 
 /* New style defs */
 #define LE_ATT_CID 4        //Spec 4.0 G.5.2.2

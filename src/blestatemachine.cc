@@ -29,7 +29,6 @@
 
 #include  <libattgatt/logging.h>
 #include  <libattgatt/bledevice.h>
-#include "lib/uuid.h"
 #include <libattgatt/att_pdu.h>
 #include <libattgatt/pretty_printers.h>
 #include <libattgatt/blestatemachine.h>
@@ -304,14 +303,14 @@ const ServiceInfo* lookup_service_by_UUID(const UUID& uuid)
 		return &*f;
 }
 
-void BLEGATTStateMachine::buggerall(BLEGATTStateMachine&)
+void BLEGATTStateMachine::buggerall()
 {}
 
 BLEGATTStateMachine::BLEGATTStateMachine(const std::string& addr)
 :dev(addr)
 {
 	buf.resize(128);
-	cb_connected(*this);
+	cb_connected();
 }
 
 int BLEGATTStateMachine::socket()
@@ -419,7 +418,7 @@ void BLEGATTStateMachine::read_and_process_next()
 				if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
 				{
 					//Maybe ? Indicates that the last one has been read.
-					cb_services_read(*this);
+					cb_services_read();
 					reset();
 				}
 				else
@@ -448,7 +447,7 @@ void BLEGATTStateMachine::read_and_process_next()
 				if(primary_services.back().end_handle == 0xffff)
 				{
 					reset();
-					cb_services_read(*this);
+					cb_services_read();
 				}
 				else
 				{
@@ -465,7 +464,7 @@ void BLEGATTStateMachine::read_and_process_next()
 				{
 					//Maybe ? Indicates that the last one has been read.
 					reset();
-					cb_find_characteristics(*this);
+					cb_find_characteristics();
 				}
 				else
 				{
@@ -537,7 +536,7 @@ void BLEGATTStateMachine::read_and_process_next()
 				{
 					//Maybe ? Indicates that the last one has been read.
 					reset();
-					cb_get_client_characteristic_configuration(*this);
+					cb_get_client_characteristic_configuration();
 				}
 				else
 				{
@@ -586,7 +585,7 @@ void BLEGATTStateMachine::read_and_process_next()
 			else
 			{
 				reset();
-				cb_write_response(*this);
+				cb_write_response();
 			}
 		}
 	}
@@ -669,4 +668,28 @@ void pretty_print_tree(const BLEGATTStateMachine& s)
 
 		cout << endl;
 	}
+}
+
+
+//Handy utility function to do the sort of thing you'd normally do.
+void BLEGATTStateMachine::do_standard_scan(std::function<void()>& cb)
+{
+
+	cb_services_read = [this]()
+	{
+		this->find_all_characteristics();
+	};
+
+
+	cb_find_characteristics = [this]()
+	{
+		this->get_client_characteristic_configuration();
+	};
+	
+	cb_get_client_characteristic_configuration = [&cb]()
+	{	
+		cb();
+	};
+
+	read_primary_services();
 }

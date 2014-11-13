@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include "uuid.h"
+#include <libattgatt/uuid.h>
 
 #if __BYTE_ORDER == __BIG_ENDIAN
 static uint128_t bluetooth_base_uuid = {
