@@ -1,0 +1,115 @@
+My adventures in bluetooth with the BLE112 devkit.
+
+Note, my machine is called "sheepfrog" http://en.wikipedia.org/wiki/Sheep_frog 
+
+Get list of adapters:
+
+$bt-adapter -l
+Available adapters:
+sheepfrog-0 (88:9F:FA:EC:27:8F)
+sheepfrog-1 (00:02:72:3E:A5:07)
+
+
+bt-adapter uses DBUS/GObject interface to bluez and is so far impenetrable.
+
+Not yet found libbluetooth C API call which does this. Kernel call exists, but not C API? 
+
+
+Find device:
+
+$bt-adapter -a sheepfrog-1 -d
+Searching...
+
+[3C:2D:B7:85:50:2A]
+  Name: DKBLE112 thermometer
+  Alias: DKBLE112 thermometer
+  Address: 3C:2D:B7:85:50:2A
+
+(bt-adapter:31979): GLib-GObject-CRITICAL **: g_value_get_string: assertion `G_VALUE_HOLDS_STRING (value)' failed
+  Icon: (null)
+  Class: 0x0
+  LegacyPairing: 0
+  Paired: 0
+  RSSI: -68
+
+[7C:E9:D3:E4:3F:7C]
+  Name: LAWRENCE-THINK
+  Alias: LAWRENCE-THINK
+  Address: 7C:E9:D3:E4:3F:7C
+  Icon: computer
+  Class: 0x3e010c
+  LegacyPairing: 0
+  Paired: 0
+  RSSI: -88
+
+Done
+
+
+Or, alternatively, use hcitool:
+
+hcitool -i hci1 scan
+
+does not work (why?). Whereas:
+
+$ sudo hcitool lescan
+LE Scan ...
+3C:2D:B7:85:50:2A (unknown)
+3C:2D:B7:85:50:2A DKBLE112 thermometer
+
+
+For some reason only lescan picks up BLE devices. Also, lescan knows which
+device to use (presumably because only one of my adapters supports BLE, so it
+skips over the first one??). Also for some reason, root is needed to initiate LE
+scan.
+
+
+Now to connect:
+(I for interactive mode). Anything before > is the prompt. # are my comments
+
+$ gatttool -b 3C:2D:B7:85:50:2A -I
+[   ][3C:2D:B7:85:50:2A][LE]> connect
+[CON][3C:2D:B7:85:50:2A][LE]>
+# From here:
+# http://stackoverflow.com/questions/15657007/bluetooth-low-energy-listening-for-notifications-indications-in-linux
+# Then type char-read-uuid 2902. You should get a list of all CCC (Client
+# Characteristic Configuration) attributes on the device
+# see also http://developer.bluetooth.org/gatt/descriptors/Pages/DescriptorViewer.aspx?u=org.bluetooth.descriptor.gatt.client_characteristic_configuration.xml
+# 
+[CON][3C:2D:B7:85:50:2A][LE]> char-read-uuid 2902
+[CON][3C:2D:B7:85:50:2A][LE]> 
+handle: 0x0012   value: 00 00 
+[CON][3C:2D:B7:85:50:2A][LE]>
+#Switch on indications...
+[CON][3C:2D:B7:85:50:2A][LE]> char-write-cmd 12 0200
+Indication   handle = 0x0010 value: 00 2f 01 00 ff 
+Indication   handle = 0x0010 value: 00 2f 01 00 ff 
+Indication   handle = 0x0010 value: 00 2f 01 00 ff 
+Indication   handle = 0x0010 value: 00 31 01 00 ff 
+# 2f 01,  31 01 is temperature in degrees C / 10 in little endian order. i.e.
+# x2f + xff*x1 = d303 i.e. 30.3 degrees C.
+
+
+
+Ah ha!
+https://www.bluetooth.org/en-us/specification/assigned-numbers-overview/generic-attribute-profile
+Magic number 2902 is the "client characteristic specification"
+
+
+More docs:
+http://developer.bluetooth.org/TechnologyOverview/Pages/BLE.aspx
+
+So, it seems that Generic Attribute Profile (GATT) is the way of communicating
+with BLE devices. Or at least it's a standard way of doing it. Presumably one
+could use lower layers, but that's making life hard. I won't try. Actually,
+apparently GATT and ATT are mandatory in BLE.
+
+Documents about the generic attribute profile are here:
+
+http://developer.bluetooth.org/TechnologyOverview/Pages/GATT.aspx
+
+
+
+
+
+
+

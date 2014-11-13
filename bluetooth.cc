@@ -46,12 +46,7 @@ int main(int argc, char **argv)
 				{
 					characteristic.cb_notify_or_indicate = [](const PDUNotificationOrIndication& n)
 					{
-						//cerr << "Hello: "  << ((n.value().first[0] + (n.value().first[1]<<8))>>4) << endl;
-						//cerr << "Hello: "  << hex  << setfill('0') << setw(4) << ((0+n.value().first[1] *256 + n.value().first[0])>>0) << dec << endl;
-							
 						cout << "Flags: " << to_hex(n.value().first[0]) << " Temperature: " << bluetooth_float_to_IEEE754(n.value().first+1) << endl;
-
-
 					};
 
 					characteristic.set_notify_and_indicate(false, true);
