@@ -165,6 +165,12 @@ class UUID: public bt_uuid_t
 		return ret;
 	}
 
+	UUID(const std::string& uuid_str)
+	{
+		//FIXME: check errors!
+		bt_string_to_uuid(this, uuid_str.c_str());
+	}
+
 	bool operator==(const UUID& uuid) const
 	{
 		return bt_uuid_cmp(this, &uuid) == 0;

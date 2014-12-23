@@ -20,11 +20,21 @@
  *
  */
 
-#include <iostream>
+
 #include <iostream>
 #include <libattgatt/blestatemachine.h>
 #include <libattgatt/float.h>
+#include <deque>
+#include "cxxgplot.h"
 using namespace std;
+
+void bin(uint8_t i)
+{
+	for(int b=7; b >= 0; b--)
+		cout << !!(i & (1<<b));
+
+}
+
 
 int main(int argc, char **argv)
 {
@@ -35,21 +45,52 @@ int main(int argc, char **argv)
 	}
 
 	log_level = Warning;
-	vector<uint8_t> buf(256);
 
 	BLEGATTStateMachine gatt(argv[1]);
+	
+	cplot::Plotter plot;
 
-	std::function<void()> cb = [&gatt](){
+	plot.range = " [ ] [0:1000] ";
+
+	deque<int> points;
+
+	std::function<void(const PDUNotificationOrIndication&)> notify_cb = [&](const PDUNotificationOrIndication& n)
+	{
+		//cerr << "Hello: "  << ((n.value().first[0] + (n.value().first[1]<<8))>>4) << endl;
+		//cerr << "Hello: "  << hex  << setfill('0') << setw(4) << ((0+n.value().first[1] *256 + n.value().first[0])>>0) << dec << endl;
+
+		//for(const uint8_t* a = n.value().first; a < n.value().second; a++)
+		//	cout << to_hex(*a) << " ";
+		//cout << endl;
+
+		const uint8_t* d = n.value().first;
+		int val = ((0+d[1] *256 + d[0])>>0) ;
+
+		cout << "Hello: "  << dec  << setfill('0') << setw(6) << val << dec << " ";
+		bin(d[1]);
+		cout << " ";
+		bin(d[0]);
+		cout << endl;
+
+		points.push_back(val);
+		if(points.size() > 100)
+			points.pop_front();
+		
+		plot.newline("line lw 10 lt 0 title \"\"");
+		plot.addpts(points);
+
+		plot.draw();
+	};
+
+
+
+	std::function<void()> cb = [&gatt, &notify_cb](){
 		for(auto& service: gatt.primary_services)
 			for(auto& characteristic: service.characteristics)
-				if(service.uuid == UUID(0x1809) && characteristic.uuid == UUID(0x2a1c))
+				if(service.uuid == UUID("7309203e-349d-4c11-ac6b-baedd1819764") && characteristic.uuid == UUID("53f72b8c-ff27-4177-9eee-30ace844f8f2"))
 				{
-					characteristic.cb_notify_or_indicate = [](const PDUNotificationOrIndication& n)
-					{
-						cout << "Flags: " << to_hex(n.value().first[0]) << " Temperature: " << bluetooth_float_to_IEEE754(n.value().first+1) << endl;
-					};
-
-					characteristic.set_notify_and_indicate(false, true);
+					characteristic.cb_notify_or_indicate = notify_cb;
+					characteristic.set_notify_and_indicate(true, false);
 				}
 	};
 
