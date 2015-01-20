@@ -29,7 +29,6 @@
 #include <libattgatt/logging.h>
 #include <libattgatt/bledevice.h>
 #include <libattgatt/att_pdu.h>
-using namespace std;
 
 
 ///Interpret a ReadByTypeResponse packet as a ReadCharacteristic packet
@@ -47,7 +46,7 @@ class GATTReadCharacteristic: public  PDUReadByTypeResponse
 	:PDUReadByTypeResponse(p)
 	{
 		if(value_size() != 5 && value_size() != 19)		
-			throw runtime_error("Invalid packet size in GATTReadCharacteristic");
+			throw std::runtime_error("Invalid packet size in GATTReadCharacteristic");
 	}
 
 	Characteristic characteristic(int i) const
@@ -76,7 +75,7 @@ class GATTReadCCC: public  PDUReadByTypeResponse
 	:PDUReadByTypeResponse(p)
 	{
 		if(value_size() != 2)
-			throw runtime_error("Invalid packet size in GATTReadCharacteristic");
+			throw std::runtime_error("Invalid packet size in GATTReadCharacteristic");
 	}
 
 	uint16_t ccc(int i) const
@@ -199,10 +198,10 @@ struct Characteristic
 	uint16_t first_handle, last_handle;
 };
 
-struct StateMachineGoneBad: public runtime_error
+struct StateMachineGoneBad: public std::runtime_error
 {
 	StateMachineGoneBad(const std::string& err)
-	:runtime_error(err)
+	:std::runtime_error(err)
 	{
 	}
 };
@@ -210,7 +209,7 @@ struct StateMachineGoneBad: public runtime_error
 
 struct ServiceInfo
 {
-	string name, id;
+	std::string name, id;
 	UUID uuid;
 };
 
@@ -219,7 +218,7 @@ struct PrimaryService
 	uint16_t start_handle;
 	uint16_t end_handle;
 	UUID uuid;
-	vector<Characteristic> characteristics;
+	std::vector<Characteristic> characteristics;
 };
 
 
@@ -243,7 +242,7 @@ class BLEGATTStateMachine
 
 		struct PrimaryServiceInfo
 		{
-			string name, id;
+			std::string name, id;
 			UUID uuid;
 		};
 
