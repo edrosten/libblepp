@@ -289,7 +289,7 @@ class BLEGATTStateMachine
 		void set_notify_and_indicate(Characteristic& c, bool notify, bool indicate);
 
 
-		void do_standard_scan(std::function<void()>& cb);
+		void setup_standard_scan(std::function<void()>& cb);
 };
 
 

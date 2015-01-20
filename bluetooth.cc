@@ -26,6 +26,7 @@
 #include <libattgatt/blestatemachine.h>
 #include <libattgatt/float.h>
 #include <deque>
+#include <unistd.h>
 #include "cxxgplot.h"  //lolzworthy plotting program
 using namespace std;
 
@@ -90,11 +91,34 @@ int main(int argc, char **argv)
 				}
 	};
 
+	gatt.setup_standard_scan(cb);
 
 	gatt.connect(argv[1]);
+	
 
+	
+	char spin[]=R"(-\|/)";
+	for(int i=0; ; i++)
+	{
 
-	gatt.do_standard_scan(cb);
+		fd_set wrset;
+		FD_ZERO(&wrset);
+		FD_SET(gatt.socket(), &wrset);
+		struct timeval tv;
+		tv.tv_sec = 0;
+		tv.tv_usec = 100000;
+		int result = select(gatt.socket() + 1, NULL, &wrset, NULL, & tv);
+		
+		if(result == 0)
+			cout << spin[i%4] << "\b" << flush;
+		else
+		{
+			cout << " \b" << flush;
+			break;
+		}
+
+	}
+
 
 	try{
 		for(;;)

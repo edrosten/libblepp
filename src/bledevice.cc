@@ -52,11 +52,11 @@ void BLEDevice::test_fd_(int fd, int line)
 {
 	if(fd < 0)
 	{
-		LOG(Info, "Error on line " << line << ": " <<strerror(errno));
+		LOG(Info, "Error on line " << line << "( " << __FILE__ << "): " <<strerror(errno));
 		exit(1);
 	}
 	else
-		LOG(Debug, "System call on " << line << ": " << strerror(errno) << " ret = " << fd);
+		LOG(Debug, "System call on " << line << "( " << __FILE__ << "): " << strerror(errno) << " ret = " << fd);
 }
 
 void BLEDevice::test_pdu(int len)

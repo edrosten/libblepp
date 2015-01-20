@@ -262,7 +262,7 @@ void BLEGATTStateMachine::connect(const string& address)
 
 int BLEGATTStateMachine::socket()
 {
-	return dev.sock;
+	return sock;
 }
 
 void BLEGATTStateMachine::reset()
@@ -348,226 +348,233 @@ void BLEGATTStateMachine::set_notify_and_indicate(Characteristic& c, bool notify
 // The state machine itself!
 void BLEGATTStateMachine::read_and_process_next()
 {
-	LOG(Debug, "State is: " << state);
-	PDUResponse r = dev.receive(buf);
+	if(state == Connecting)
+	{
 
-	if(r.type() == ATT_OP_HANDLE_NOTIFY || r.type() == ATT_OP_HANDLE_IND)
-	{
-		PDUNotificationOrIndication n(r);
-		//Find the correct characteristic
-		for(auto& s:primary_services)
-			if(n.handle() > s.start_handle && n.handle() <= s.end_handle)
-				for(auto& c:s.characteristics)
-					if(n.handle() == c.value_handle)
-					{
-						if(c.cb_notify_or_indicate)
-							c.cb_notify_or_indicate(n);
-						else
-							cb_notify_or_indicate(c, n);
-					}
-		
-		//Respond to indications after the callback has run
-		if(!n.notification())
-			dev.send_handle_value_confirmation();
-	}
-	else if(r.type() == ATT_OP_ERROR && PDUErrorResponse(r).request_opcode() != last_request)
-	{
-		PDUErrorResponse err(r);
-		
-		std::string msg = string("Unexpected opcode in error. Expected ") + att_op2str(last_request) + " got "  + att_op2str(err.request_opcode());
-		LOG(Error, msg);
-		reset(); // And hope for the best
-		throw StateMachineGoneBad(msg);
-	}
-	else if(r.type() != ATT_OP_ERROR && r.type() != last_request + 1)
-	{
-		string msg = string("Unexpected response. Expected ") + att_op2str(last_request+1) + " got "  + att_op2str(r.type());
-		LOG(Error, msg);
-		reset(); // And hope for the best
-		throw StateMachineGoneBad(msg);
 	}
 	else
 	{
-		if(state == ReadingPrimaryService)
+
+		LOG(Debug, "State is: " << state);
+		PDUResponse r = dev.receive(buf);
+
+		if(r.type() == ATT_OP_HANDLE_NOTIFY || r.type() == ATT_OP_HANDLE_IND)
 		{
-			if(r.type() == ATT_OP_ERROR)
+			PDUNotificationOrIndication n(r);
+			//Find the correct characteristic
+			for(auto& s:primary_services)
+				if(n.handle() > s.start_handle && n.handle() <= s.end_handle)
+					for(auto& c:s.characteristics)
+						if(n.handle() == c.value_handle)
+						{
+							if(c.cb_notify_or_indicate)
+								c.cb_notify_or_indicate(n);
+							else
+								cb_notify_or_indicate(c, n);
+						}
+			
+			//Respond to indications after the callback has run
+			if(!n.notification())
+				dev.send_handle_value_confirmation();
+		}
+		else if(r.type() == ATT_OP_ERROR && PDUErrorResponse(r).request_opcode() != last_request)
+		{
+			PDUErrorResponse err(r);
+			
+			std::string msg = string("Unexpected opcode in error. Expected ") + att_op2str(last_request) + " got "  + att_op2str(err.request_opcode());
+			LOG(Error, msg);
+			reset(); // And hope for the best
+			throw StateMachineGoneBad(msg);
+		}
+		else if(r.type() != ATT_OP_ERROR && r.type() != last_request + 1)
+		{
+			string msg = string("Unexpected response. Expected ") + att_op2str(last_request+1) + " got "  + att_op2str(r.type());
+			LOG(Error, msg);
+			reset(); // And hope for the best
+			throw StateMachineGoneBad(msg);
+		}
+		else
+		{
+			if(state == ReadingPrimaryService)
 			{
-				if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
+				if(r.type() == ATT_OP_ERROR)
 				{
-					//Maybe ? Indicates that the last one has been read.
-					cb_services_read();
-					reset();
+					if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
+					{
+						//Maybe ? Indicates that the last one has been read.
+						cb_services_read();
+						reset();
+					}
+					else
+					{
+						PDUErrorResponse err(r);
+						string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
+						LOG(Error, msg);
+						reset(); // And hope for the best
+						throw StateMachineGoneBad(msg);
+					}
 				}
 				else
 				{
-					PDUErrorResponse err(r);
-					string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
-					LOG(Error, msg);
-					reset(); // And hope for the best
-					throw StateMachineGoneBad(msg);
+					GATTReadServiceGroup g(r);
+					
+					for(int i=0; i < g.num_elements(); i++)
+					{
+						struct PrimaryService service;
+						service.start_handle = g.start_handle(i);
+						service.end_handle   = g.end_handle(i);
+						service.uuid         = UUID::from(g.uuid(i));
+						primary_services.push_back(service);
+					}
+					
+
+					if(primary_services.back().end_handle == 0xffff)
+					{
+						reset();
+						cb_services_read();
+					}
+					else
+					{
+						next_handle_to_read = primary_services.back().end_handle+1;
+						state_machine_write();
+					}
 				}
 			}
-			else
+			else if(state == FindAllCharacteristics)
 			{
-				GATTReadServiceGroup g(r);
-				
-				for(int i=0; i < g.num_elements(); i++)
+				if(r.type() == ATT_OP_ERROR)
 				{
-					struct PrimaryService service;
-					service.start_handle = g.start_handle(i);
-					service.end_handle   = g.end_handle(i);
-					service.uuid         = UUID::from(g.uuid(i));
-					primary_services.push_back(service);
-				}
-				
-
-				if(primary_services.back().end_handle == 0xffff)
-				{
-					reset();
-					cb_services_read();
+					if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
+					{
+						//Maybe ? Indicates that the last one has been read.
+						reset();
+						cb_find_characteristics();
+					}
+					else
+					{
+						PDUErrorResponse err(r);
+						string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
+						LOG(Error, msg);
+						reset(); // And hope for the best
+						throw StateMachineGoneBad(msg);
+					}
 				}
 				else
 				{
-					next_handle_to_read = primary_services.back().end_handle+1;
+					GATTReadCharacteristic rc(r);
+
+					for(int i=0; i < rc.num_elements(); i++)
+					{
+						uint16_t handle = rc.handle(i);
+						GATTReadCharacteristic::Characteristic ch = rc.characteristic(i);
+
+						LOG(Debug, "Found characteristic handle: " << to_hex(handle));
+
+						//Search for the correct service.
+						for(unsigned int s=0; s < primary_services.size(); s++)
+						{
+							if(handle > primary_services[s].start_handle && handle <= primary_services[s].end_handle)
+							{
+								LOG(Debug, "  handle belongs to service " << s);
+								Characteristic c(this);
+
+
+								c.broadcast= ch.flags & GATT_CHARACTERISTIC_FLAGS_BROADCAST;
+								c.read     = ch.flags & GATT_CHARACTERISTIC_FLAGS_READ;
+								c.write_without_response= ch.flags & GATT_CHARACTERISTIC_FLAGS_WRITE_WITHOUT_RESPONSE;
+								c.write    = ch.flags & GATT_CHARACTERISTIC_FLAGS_WRITE;
+								c.notify   = ch.flags & GATT_CHARACTERISTIC_FLAGS_NOTIFY;
+								c.indicate = ch.flags & GATT_CHARACTERISTIC_FLAGS_INDICATE;
+								c.authenticated_write = ch.flags & GATT_CHARACTERISTIC_FLAGS_AUTHENTICATED_SIGNED_WRITES;
+								c.extended = ch.flags & GATT_CHARACTERISTIC_FLAGS_EXTENDED_PROPERTIES;
+								c.uuid     = UUID::from(ch.uuid);
+								c.value_handle = ch.handle;
+								c.client_characteric_configuration_handle = 0;
+								c.first_handle = handle;
+								
+								//Initially mark the end as the start of the current service
+								c.last_handle = primary_services[s].end_handle;
+
+								//Terminate the previous characteristic
+								if(!primary_services[s].characteristics.empty())
+									primary_services[s].characteristics.back().last_handle = handle-1;
+								
+								primary_services[s].characteristics.push_back(c);
+
+
+
+							}
+						}
+
+						next_handle_to_read = handle+1;
+					}
+					LOG(Debug,  "Reading " << to_hex((uint16_t)next_handle_to_read) << " next");
 					state_machine_write();
 				}
 			}
-		}
-		else if(state == FindAllCharacteristics)
-		{
-			if(r.type() == ATT_OP_ERROR)
+			else if(state == GetClientCharaceristicConfiguration)
 			{
-				if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
+				if(r.type() == ATT_OP_ERROR)
 				{
-					//Maybe ? Indicates that the last one has been read.
-					reset();
-					cb_find_characteristics();
-				}
-				else
-				{
-					PDUErrorResponse err(r);
-					string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
-					LOG(Error, msg);
-					reset(); // And hope for the best
-					throw StateMachineGoneBad(msg);
-				}
-			}
-			else
-			{
-				GATTReadCharacteristic rc(r);
-
-				for(int i=0; i < rc.num_elements(); i++)
-				{
-					uint16_t handle = rc.handle(i);
-					GATTReadCharacteristic::Characteristic ch = rc.characteristic(i);
-
-					LOG(Debug, "Found characteristic handle: " << to_hex(handle));
-
-					//Search for the correct service.
-					for(unsigned int s=0; s < primary_services.size(); s++)
+					if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
 					{
-						if(handle > primary_services[s].start_handle && handle <= primary_services[s].end_handle)
-						{
-							LOG(Debug, "  handle belongs to service " << s);
-							Characteristic c(this);
-
-
-							c.broadcast= ch.flags & GATT_CHARACTERISTIC_FLAGS_BROADCAST;
-							c.read     = ch.flags & GATT_CHARACTERISTIC_FLAGS_READ;
-							c.write_without_response= ch.flags & GATT_CHARACTERISTIC_FLAGS_WRITE_WITHOUT_RESPONSE;
-							c.write    = ch.flags & GATT_CHARACTERISTIC_FLAGS_WRITE;
-							c.notify   = ch.flags & GATT_CHARACTERISTIC_FLAGS_NOTIFY;
-							c.indicate = ch.flags & GATT_CHARACTERISTIC_FLAGS_INDICATE;
-							c.authenticated_write = ch.flags & GATT_CHARACTERISTIC_FLAGS_AUTHENTICATED_SIGNED_WRITES;
-							c.extended = ch.flags & GATT_CHARACTERISTIC_FLAGS_EXTENDED_PROPERTIES;
-							c.uuid     = UUID::from(ch.uuid);
-							c.value_handle = ch.handle;
-							c.client_characteric_configuration_handle = 0;
-							c.first_handle = handle;
-							
-							//Initially mark the end as the start of the current service
-							c.last_handle = primary_services[s].end_handle;
-
-							//Terminate the previous characteristic
-							if(!primary_services[s].characteristics.empty())
-								primary_services[s].characteristics.back().last_handle = handle-1;
-							
-							primary_services[s].characteristics.push_back(c);
-
-
-
-						}
+						//Maybe ? Indicates that the last one has been read.
+						reset();
+						cb_get_client_characteristic_configuration();
 					}
-
-					next_handle_to_read = handle+1;
-				}
-				LOG(Debug,  "Reading " << to_hex((uint16_t)next_handle_to_read) << " next");
-				state_machine_write();
-			}
-		}
-		else if(state == GetClientCharaceristicConfiguration)
-		{
-			if(r.type() == ATT_OP_ERROR)
-			{
-				if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
-				{
-					//Maybe ? Indicates that the last one has been read.
-					reset();
-					cb_get_client_characteristic_configuration();
+					else
+					{
+						PDUErrorResponse err(r);
+						string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
+						LOG(Error, msg);
+						reset(); // And hope for the best
+						throw StateMachineGoneBad(msg);
+					}
 				}
 				else
+				{
+					GATTReadCCC rc(r);
+
+					for(int i=0; i < rc.num_elements(); i++)
+					{
+						uint16_t handle = rc.handle(i);
+						next_handle_to_read = handle + 1;
+						LOG(Debug, "Handle: " << to_hex(rc.handle(i)) << "  ccc: " << to_hex(rc.ccc(i)));
+
+
+						//Find the correct place
+						for(auto& s:primary_services)
+							if(handle > s.start_handle && handle <= s.end_handle)
+								for(auto& c:s.characteristics)
+									if(handle > c.first_handle && handle <= c.last_handle)
+									{
+										c.client_characteric_configuration_handle = rc.handle(i);
+										c.ccc_last_known_value = rc.ccc(i);
+									}
+									
+					}
+					state_machine_write();
+				}
+			}
+			else if(state == AwaitingWriteResponse)
+			{
+
+				if(r.type() == ATT_OP_ERROR)
 				{
 					PDUErrorResponse err(r);
 					string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
 					LOG(Error, msg);
-					reset(); // And hope for the best
 					throw StateMachineGoneBad(msg);
 				}
-			}
-			else
-			{
-				GATTReadCCC rc(r);
-
-				for(int i=0; i < rc.num_elements(); i++)
+				else
 				{
-					uint16_t handle = rc.handle(i);
-					next_handle_to_read = handle + 1;
-					LOG(Debug, "Handle: " << to_hex(rc.handle(i)) << "  ccc: " << to_hex(rc.ccc(i)));
-
-
-					//Find the correct place
-					for(auto& s:primary_services)
-						if(handle > s.start_handle && handle <= s.end_handle)
-							for(auto& c:s.characteristics)
-								if(handle > c.first_handle && handle <= c.last_handle)
-								{
-									c.client_characteric_configuration_handle = rc.handle(i);
-									c.ccc_last_known_value = rc.ccc(i);
-								}
-								
+					reset();
+					cb_write_response();
 				}
-				state_machine_write();
-			}
-		}
-		else if(state == AwaitingWriteResponse)
-		{
-
-			if(r.type() == ATT_OP_ERROR)
-			{
-				PDUErrorResponse err(r);
-				string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
-				LOG(Error, msg);
-				throw StateMachineGoneBad(msg);
-			}
-			else
-			{
-				reset();
-				cb_write_response();
 			}
 		}
 	}
 }
-
 		
 
 void Characteristic::set_notify_and_indicate(bool notify, bool indicate)
@@ -632,7 +639,7 @@ void pretty_print_tree(const BLEGATTStateMachine& s)
 
 
 //Handy utility function to do the sort of thing you'd normally do.
-void BLEGATTStateMachine::do_standard_scan(std::function<void()>& cb)
+void BLEGATTStateMachine::setup_standard_scan(std::function<void()>& cb)
 {
 	ENTER();
 
@@ -651,6 +658,9 @@ void BLEGATTStateMachine::do_standard_scan(std::function<void()>& cb)
 	{	
 		cb();
 	};
-
-	read_primary_services();
+	
+	cb_connected = [this]()
+	{
+		read_primary_services();
+	};
 }
