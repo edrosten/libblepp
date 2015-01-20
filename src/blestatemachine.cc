@@ -20,11 +20,14 @@
  *
  */
 
-#include  <libattgatt/logging.h>
-#include  <libattgatt/bledevice.h>
+#include <libattgatt/logging.h>
+#include <libattgatt/bledevice.h>
 #include <libattgatt/att_pdu.h>
 #include <libattgatt/pretty_printers.h>
 #include <libattgatt/blestatemachine.h>
+
+#include <algorithm>
+
 using namespace std;
 
 

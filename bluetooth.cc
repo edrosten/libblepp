@@ -22,6 +22,7 @@
 
 
 #include <iostream>
+#include <iomanip>
 #include <libattgatt/blestatemachine.h>
 #include <libattgatt/float.h>
 #include <deque>

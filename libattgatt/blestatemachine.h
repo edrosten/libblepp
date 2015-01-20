@@ -22,23 +22,13 @@
  *
  */
 
-#include <iostream>
-#include <cstdlib>
-#include <cstring>
-#include <cerrno>
 #include <vector>
-#include <sstream>
-#include <iomanip>
-#include <cassert>
-#include <tuple>
 #include <stdexcept>
 #include <functional>
-#include <algorithm>
 
-#include  <libattgatt/logging.h>
-#include  <libattgatt/bledevice.h>
+#include <libattgatt/logging.h>
+#include <libattgatt/bledevice.h>
 #include <libattgatt/att_pdu.h>
-#include <libattgatt/pretty_printers.h>
 using namespace std;
 
 
