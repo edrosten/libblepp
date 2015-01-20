@@ -35,14 +35,13 @@
 //Mostly what it can do is write ATT command packets (PDUs) and receive PDUs back.
 struct BLEDevice
 {
-	bool constructing;
-	int sock;
+	const int& sock;
 	static const int buflen=ATT_DEFAULT_MTU;
 	std::vector<std::uint8_t> buf;
 
 	void test_fd_(int fd, int line);
 	void test_pdu(int len);
-	BLEDevice(const std::string&);
+	BLEDevice(const int& sock_);
 
 	void send_read_by_type(const bt_uuid_t& uuid, std::uint16_t start = 0x0001, std::uint16_t end=0xffff);
 	void send_find_information(std::uint16_t start = 0x0001, std::uint16_t end=0xffff);

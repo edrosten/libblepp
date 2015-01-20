@@ -53,15 +53,6 @@ void BLEDevice::test_fd_(int fd, int line)
 	if(fd < 0)
 	{
 		LOG(Info, "Error on line " << line << ": " <<strerror(errno));
-
-		if(constructing && sock >= 0)
-		{
-			int ret = close(sock);
-			if(ret < 0)
-				LOG(Warning, "Error on line " << line << ": " <<strerror(errno));
-			else
-				LOG(Debug, "System call on " << line << ": " << strerror(errno));
-		}
 		exit(1);
 	}
 	else
@@ -152,9 +143,10 @@ PDUResponse BLEDevice::receive(vector<uint8_t>& v)
 
 
 
-BLEDevice::BLEDevice(const std::string& address)
-:constructing(true)
+BLEDevice::BLEDevice(const int& sock_)
+:sock(sock_)
 {
+/*
 	//Allocate socket and create endpoint.
 	sock = socket(PF_BLUETOOTH, SOCK_SEQPACKET, BTPROTO_L2CAP);
 	test(sock);
@@ -241,4 +233,5 @@ BLEDevice::BLEDevice(const std::string& address)
 	LOGVAR(options.txwin_size);
 
 	buf.resize(ATT_DEFAULT_MTU);
+*/
 }

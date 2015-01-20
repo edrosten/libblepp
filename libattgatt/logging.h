@@ -46,8 +46,7 @@ static const char* log_types[] =
 
 extern LogLevels log_level;
 
-#define LOG(X, Y) \
-do{\
+#define LOG(X, Y) do{\
 	if(X <= log_level)\
 	{\
 		if(X >= LogLevels::Debug)\

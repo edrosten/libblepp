@@ -20,15 +20,31 @@
  *
  */
 
-#include <libattgatt/logging.h>
-#include <libattgatt/bledevice.h>
-#include <libattgatt/att_pdu.h>
-#include <libattgatt/pretty_printers.h>
-#include <libattgatt/blestatemachine.h>
+#include "libattgatt/bledevice.h"
+#include "libattgatt/logging.h"
+#include "libattgatt/att_pdu.h"
+#include "libattgatt/pretty_printers.h"
+#include "libattgatt/blestatemachine.h"
 
 #include <algorithm>
 
+#include <unistd.h>
+#include <bluetooth/bluetooth.h>
+#include <bluetooth/l2cap.h>
 using namespace std;
+
+
+template<class C> const C& haxx(const C& X)
+{
+	return X;
+}
+
+static int haxx(uint8_t X)
+{
+	return X;
+}
+#define LOGVAR(X) LOG(Info,  #X << " = " << haxx(X))
+
 
 
 #if 0
@@ -243,6 +259,19 @@ class SimpleBlockingGATTDevice: public SimpleBlockingATTDevice
 
 #endif
 
+#define log_fd(X) log_fd_(X, __LINE__, __FILE__)
+
+int log_fd_(int fd, int line, const char* file)
+{
+	if(fd == -1)
+	{
+		LOG(Error, "Error on line: " << line << " (" << file << "): " << strerror(errno));
+	}
+	else
+		LOG(Info, "Socket connect success: " << line << " (" << file << ")");
+
+	return fd;
+}
 
 
 const ServiceInfo* lookup_service_by_UUID(const UUID& uuid)
@@ -297,17 +326,140 @@ const ServiceInfo* lookup_service_by_UUID(const UUID& uuid)
 		return 0;
 	else
 		return &*f;
-}
+}	
+
+
 
 void BLEGATTStateMachine::buggerall()
-{}
-
-BLEGATTStateMachine::BLEGATTStateMachine(const std::string& addr)
-:dev(addr)
 {
-	buf.resize(128);
-	cb_connected();
 }
+
+
+void BLEGATTStateMachine::close()
+{
+	if(sock != -1)
+		log_fd(::close(sock));
+	sock = -1;
+}
+
+
+int log_l2cap_options(int sock)
+{
+	//Read and log the socket setup.
+
+	l2cap_options options;
+	unsigned int len = sizeof(options);
+	memset(&options, 0, len);
+
+	//Get the options with a minor bit of cargo culting.
+	//SOL_L2CAP seems to mean that is should operate at the L2CAP level of the stack
+	//L2CAP_OPTIONS who knows?
+	if(log_fd(getsockopt(sock, SOL_L2CAP, L2CAP_OPTIONS, &options, &len)) == -1)
+		return -1
+
+	LOGVAR(options.omtu);
+	LOGVAR(options.imtu);
+	LOGVAR(options.flush_to);
+	LOGVAR(options.mode);
+	LOGVAR(options.fcs);
+	LOGVAR(options.max_tx);
+	LOGVAR(options.txwin_size);
+	
+	return 0;
+}
+
+BLEGATTStateMachine::BLEGATTStateMachine()
+:dev(sock)
+{
+	//The constructor sets up the socket. Unless something is badly broken,
+	//then we should succeed. Therefore errors are an exception.
+
+	//Allocate socket and create endpoint.
+	//Make socket nonblocking so connect() doesn't hang.
+	sock = log_fd(socket(PF_BLUETOOTH, SOCK_SEQPACKET | SOCK_NONBLOCK, BTPROTO_L2CAP));
+
+	if(sock == -1)
+		throw SocketAllocationFailed(strerror(errno));
+
+	////////////////////////////////////////
+	//Bind the socket
+	//I believe that l2 is for an l2cap socket. These are kind of like
+	//UDP in that they have port numbers and are packet oriented.
+	//However they are also ordered and reliable.
+	struct sockaddr_l2 addr;
+		
+	bdaddr_t source_address = {{0,0,0,0,0,0}};  //i.e. the adapter. Note, 0, corresponds to BDADDR_ANY
+	                                //However BDADDR_ANY uses a nonstandard C hack and does not compile
+									//under C++. So, set it manually. :(
+	//So, a sockaddr_l2 has the family (obviously)
+	//a PSM (wtf?) 
+	//  Protocol Service Multiplexer (WTF?)
+	//an address (of course)
+	//a CID (wtf) 
+	//  Channel ID (i.e. port number?)
+	//and an address type (wtf)
+	//Holy cargo cult, Batman!
+
+	memset(&addr, 0, sizeof(addr));
+	addr.l2_family = AF_BLUETOOTH;
+	addr.l2_psm = 0;
+	addr.l2_cid = htobs(LE_ATT_CID);
+
+
+	bacpy(&addr.l2_bdaddr, &source_address);
+
+	//Address type: Low Energy public
+	addr.l2_bdaddr_type=BDADDR_LE_PUBLIC;
+	
+	//Bind socket. This associates it with a particular adapter.
+	//We chose ANY as the source address, so packets will go out of 
+	//whichever adapter necessary.
+	int ret = log_fd(bind(sock, (sockaddr*)&addr, sizeof(addr)));
+
+	if(ret == -1)
+	{
+		close();
+		throw SocketAllocationFailed(strerror(errno));
+	}
+
+	if(log_l2cap_options(sock) == -1)
+	{
+		close();
+		throw SocketGetSockOptFailed(strerror(errno));
+	}
+
+	buf.resize(128);
+	//cb_connected();
+}
+
+
+void connect(const string& address)
+{
+	//Construct an address from the address string
+	
+	//Can also use bacpy to copy addresses about
+
+	str2ba(address.c_str(), &addr.l2_bdaddr);
+	ret = connect(sock, (sockaddr*)&addr, sizeof(addr));
+
+	if(ret == 0)
+	{
+		state = Idle;
+
+		if(log_l2cap_options(sock) == -1)
+			throw SocketGetSockOptFailed(strerror(errno));
+
+		cb_connected();
+	}
+	else if(errno = EINPROGRESS)
+	{
+		//This "error" means the connection is happening and
+		//we should come back later after select() returns.
+		state = Connecting;
+	}
+}
+
+
 
 int BLEGATTStateMachine::socket()
 {
@@ -340,8 +492,17 @@ void BLEGATTStateMachine::state_machine_write()
 	}
 }
 
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// Commands to move machine into other states explicitly
+//
+
 void BLEGATTStateMachine::read_primary_services()
 {
+	if(state != Idle)
+		throw logic_error("Error trying to issue command mid state");
 	state = ReadingPrimaryService;
 	next_handle_to_read=1;
 	state_machine_write();
@@ -350,7 +511,7 @@ void BLEGATTStateMachine::read_primary_services()
 void BLEGATTStateMachine::find_all_characteristics()
 {
 	if(state != Idle)
-		throw "Error trying to issue command mid state\n";
+		throw logic_error("Error trying to issue command mid state");
 	state = FindAllCharacteristics;
 	next_handle_to_read=1;
 	state_machine_write();
@@ -359,12 +520,33 @@ void BLEGATTStateMachine::find_all_characteristics()
 void BLEGATTStateMachine::get_client_characteristic_configuration()
 {
 	if(state != Idle)
-		throw "Error trying to issue command mid state\n";
+		throw logic_error("Error trying to issue command mid state");
 	state = GetClientCharaceristicConfiguration;
 	next_handle_to_read=1;
 	state_machine_write();
 }
 
+void BLEGATTStateMachine::set_notify_and_indicate(Characteristic& c, bool notify, bool indicate)
+{
+	LOG(Trace, "BLEGATTStateMachine::enable_indications(Characteristic&)");
+
+	if(state != Idle)
+		throw logic_error("Error trying to issue command mid state");
+	
+	if(!c.indicate && indicate)
+		throw logic_error("Error: this is not indicateable");
+	if(!c.notify && notify)
+		throw logic_error("Error: this is not notifiable");
+
+	//FIXME: check for CCC
+	c.ccc_last_known_value = notify | (indicate << 1);
+	dev.send_write_command(c.client_characteric_configuration_handle, c.ccc_last_known_value);
+}
+
+
+////////////////////////////////////////////////////////////////////////////////
+//
+// The state machine itself!
 void BLEGATTStateMachine::read_and_process_next()
 {
 	LOG(Debug, "State is: " << state);
@@ -588,23 +770,6 @@ void BLEGATTStateMachine::read_and_process_next()
 }
 
 		
-
-void BLEGATTStateMachine::set_notify_and_indicate(Characteristic& c, bool notify, bool indicate)
-{
-	LOG(Trace, "BLEGATTStateMachine::enable_indications(Characteristic&)");
-
-	if(state != Idle)
-		throw "Error trying to issue command mid state\n";
-	
-	if(!c.indicate && indicate)
-		throw("Error: this is not indicateable");
-	if(!c.notify && notify)
-		throw("Error: this is not notifiable");
-
-	//FIXME: check for CCC
-	c.ccc_last_known_value = notify | (indicate << 1);
-	dev.send_write_command(c.client_characteric_configuration_handle, c.ccc_last_known_value);
-}
 
 void Characteristic::set_notify_and_indicate(bool notify, bool indicate)
 {

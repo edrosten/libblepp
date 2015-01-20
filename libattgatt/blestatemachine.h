@@ -122,6 +122,8 @@ class BLEGATTStateMachine;
 
 enum  States
 {
+	Disconnected,
+	Connecting,
 	Idle,
 	ReadingPrimaryService,
 	FindAllCharacteristics,
@@ -227,13 +229,15 @@ const ServiceInfo* lookup_service_by_UUID(const UUID& uuid);
 class BLEGATTStateMachine
 {
 	private:
+		
+		int sock;
 
 		static void buggerall();
 
 		BLEDevice dev;
 		
 
-		States state = Idle;
+		States state = Disconnected;
 		int next_handle_to_read=-1;
 		int last_request=-1;
 		
@@ -248,6 +252,7 @@ class BLEGATTStateMachine
 
 		void reset();
 		void state_machine_write();
+		void close();
 
 	public:
 
@@ -262,7 +267,12 @@ class BLEGATTStateMachine
 		std::function<void(Characteristic&, const PDUNotificationOrIndication&)> cb_notify_or_indicate;
 
 
-		BLEGATTStateMachine(const std::string& addr);
+		BLEGATTStateMachine();
+		~BLEGATTStateMachine();
+
+		
+		void connect(const std::string& address);
+
 
 		int socket();
 		
@@ -280,5 +290,11 @@ class BLEGATTStateMachine
 
 
 void pretty_print_tree(const BLEGATTStateMachine& s);
+
+
+
+class SocketAllocationFailed: public std::runtime_error { using runtime_error::runtime_error; };
+class SocketBindFailed: public std::runtime_error { using runtime_error::runtime_error; };
+class SocketGetSockOptFailed: public std::runtime_error { using runtime_error::runtime_error; };
 
 #endif

@@ -26,7 +26,7 @@
 #include <libattgatt/blestatemachine.h>
 #include <libattgatt/float.h>
 #include <deque>
-#include "cxxgplot.h"
+#include "cxxgplot.h"  //lolzworthy plotting program
 using namespace std;
 
 void bin(uint8_t i)
@@ -47,7 +47,7 @@ int main(int argc, char **argv)
 
 	log_level = Warning;
 
-	BLEGATTStateMachine gatt(argv[1]);
+	BLEGATTStateMachine gatt;
 	
 	cplot::Plotter plot;
 
@@ -57,13 +57,8 @@ int main(int argc, char **argv)
 
 	std::function<void(const PDUNotificationOrIndication&)> notify_cb = [&](const PDUNotificationOrIndication& n)
 	{
-		//cerr << "Hello: "  << ((n.value().first[0] + (n.value().first[1]<<8))>>4) << endl;
-		//cerr << "Hello: "  << hex  << setfill('0') << setw(4) << ((0+n.value().first[1] *256 + n.value().first[0])>>0) << dec << endl;
-
-		//for(const uint8_t* a = n.value().first; a < n.value().second; a++)
-		//	cout << to_hex(*a) << " ";
-		//cout << endl;
-
+		//This particular device sends 16 bit integers.
+		//Extract them and both print them in binary and send them to the plotting program
 		const uint8_t* d = n.value().first;
 		int val = ((0+d[1] *256 + d[0])>>0) ;
 
@@ -94,6 +89,10 @@ int main(int argc, char **argv)
 					characteristic.set_notify_and_indicate(true, false);
 				}
 	};
+
+
+	gatt.connect(argv[1]);
+
 
 	gatt.do_standard_scan(cb);
 
