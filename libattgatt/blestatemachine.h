@@ -31,6 +31,8 @@
 #include <libattgatt/att_pdu.h>
 
 
+#include <bluetooth/l2cap.h>
+
 ///Interpret a ReadByTypeResponse packet as a ReadCharacteristic packet
 class GATTReadCharacteristic: public  PDUReadByTypeResponse
 {
@@ -229,8 +231,10 @@ const ServiceInfo* lookup_service_by_UUID(const UUID& uuid);
 class BLEGATTStateMachine
 {
 	private:
+		struct sockaddr_l2 addr;
 		
 		int sock;
+
 
 		static void buggerall();
 
@@ -296,5 +300,6 @@ void pretty_print_tree(const BLEGATTStateMachine& s);
 class SocketAllocationFailed: public std::runtime_error { using runtime_error::runtime_error; };
 class SocketBindFailed: public std::runtime_error { using runtime_error::runtime_error; };
 class SocketGetSockOptFailed: public std::runtime_error { using runtime_error::runtime_error; };
+class SocketConnectFailed: public std::runtime_error { using runtime_error::runtime_error; };
 
 #endif

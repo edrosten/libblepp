@@ -29,6 +29,9 @@
 #include <algorithm>
 
 #include <unistd.h>
+#include <sys/types.h>
+#include <sys/socket.h>
+
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
 using namespace std;
@@ -46,219 +49,6 @@ static int haxx(uint8_t X)
 #define LOGVAR(X) LOG(Info,  #X << " = " << haxx(X))
 
 
-
-#if 0
-//Easier to use implementation of the ATT protocol.
-//This implementation reads whole chunks of stuff in one go
-//and feeds back the data to the user.
-struct SimpleBlockingATTDevice: public BLEDevice
-{
-	SimpleBlockingATTDevice(const std::string& s)
-	:BLEDevice(s)
-	{}
-
-	template<class Ret, class PDUType, class E, class F, class G> 
-	vector<Ret> read_multiple(int request, int response, const E& call,  const F& func, const G& last)
-	{
-		vector<Ret> ret;
-		vector<uint8_t> buf(ATT_DEFAULT_MTU);
-		
-		int start=1;
-
-		for(;;)
-		{
-			call(start, 0xffff);
-			PDUResponse r = receive(buf);
-		
-			if(r.type() == ATT_OP_ERROR)
-			{
-				PDUErrorResponse err = r;
-
-				if(err.request_opcode() != request)
-				{
-					LOG(Error, string("Unexpected opcode in error. Expected ") + att_op2str(request) + " got "  + att_op2str(err.request_opcode()));
-					throw 1;
-				}
-				else if(err.error_code() != ATT_ECODE_ATTR_NOT_FOUND)
-				{
-					LOG(Error, string("Received unexpected error:") + att_ecode2str(err.error_code()));
-					throw 1;
-				}
-				else 
-					break;
-			}
-			else if(r.type() != response)
-			{
-					LOG(Error, string("Unexpected response. Expected ") + att_op2str(response) + " got "  + att_op2str(r.type()));
-					//FIXME
-					//Break if the packed is NOT a notification or indication
-			}
-			else
-			{
-				PDUType t = r;
-				for(int i=0; i < t.num_elements(); i++)
-					ret.push_back(func(t, i));
-				
-				if(last(t) == 0xffff)
-					break;
-				else
-					start = last(t)+1;
-
-				LOG(Debug, "New start = " << start);
-			}
-		}
-
-		return ret;
-
-	}
-
-
-	vector<pair<uint16_t, vector<uint8_t>>> read_by_type(const bt_uuid_t& uuid)
-	{
-		return read_multiple<pair<uint16_t, vector<uint8_t>>, PDUReadByTypeResponse>(ATT_OP_READ_BY_TYPE_REQ, ATT_OP_READ_BY_TYPE_RESP, 
-			[&](int start, int end)
-			{
-				send_read_by_type(uuid, start, end);	
-			},
-			[](const PDUReadByTypeResponse& p, int i)
-			{
-				return make_pair(p.handle(i),  vector<uint8_t>(p.value(i).first, p.value(i).second));
-			}, 
-			[](const PDUReadByTypeResponse& p)
-			{
-				return p.handle(p.num_elements()-1);
-			})
-			;
-
-	}
-	
-	
-	vector<pair<uint16_t, bt_uuid_t>> find_information()
-	{
-		return read_multiple<pair<uint16_t, bt_uuid_t>, PDUFindInformationResponse>(ATT_OP_FIND_INFO_REQ, ATT_OP_FIND_INFO_RESP, 
-			[&](int start, int end)
-			{
-				send_find_information(start, end);
-			},
-			[](const PDUFindInformationResponse&p, int i)
-			{
-				return make_pair(p.handle(i), p.uuid(i));
-			},
-			[](const PDUFindInformationResponse& p)
-			{
-				return p.handle(p.num_elements()-1);
-			});
-	}
-};
-
-
-
-///Interpret a ReadByTypeResponse packet as a ReadCharacteristic packet
-class GATTReadCCC: public  PDUReadByTypeResponse
-{
-	public:
-
-	GATTReadCCC(const PDUResponse& p)
-	:PDUReadByTypeResponse(p)
-	{
-		if(value_size() != 2)
-			throw runtime_error("Invalid packet size in GATTReadCharacteristic");
-	}
-
-	uint16_t ccc(int i) const
-	{
-		return att_get_u16(value(i).first);
-	}
-};
-///Interpret a read_group_by_type resoponde as a read service group response
-class GATTReadServiceGroup: public PDUReadGroupByTypeResponse
-{
-	public:
-	GATTReadServiceGroup(const PDUResponse& p)
-	:PDUReadGroupByTypeResponse(p)
-	{
-		if(value_size() != 2 && value_size() != 16)
-		{
-			LOG(Error, "UUID length" << value_size());
-			error<std::runtime_error>("Invalid UUID length in PDUReadGroupByTypeResponse");
-		}
-	}
-
-	bt_uuid_t uuid(int i) const
-	{
-		const uint8_t* begin = data + i*element_size() + 6;
-
-		bt_uuid_t uuid;
-		if(value_size() == 2)
-		{
-			uuid.type = BT_UUID16;
-			uuid.value.u16 = att_get_u16(begin);
-		}
-		else
-		{
-			uuid.type = BT_UUID128;
-			uuid.value.u128 = att_get_u128(begin);
-		}
-			
-		return uuid;
-	}
-};
-
-
-//This class layers the GATT profile on top of the ATT proticol
-//Provides higher level GATT specific meaning to attributes.
-class SimpleBlockingGATTDevice: public SimpleBlockingATTDevice
-{
-	public:
-	SimpleBlockingGATTDevice(const std::string& s)
-	:SimpleBlockingATTDevice(s)
-	{
-	}
-
-	typedef GATTReadCharacteristic::Characteristic Characteristic;
-
-	vector<pair<uint16_t, Characteristic>> read_characaristic()
-	{
-		bt_uuid_t uuid;
-		uuid.value.u16 = GATT_CHARACTERISTIC;
-		uuid.type = BT_UUID16;
-		return read_multiple<pair<uint16_t, Characteristic>, GATTReadCharacteristic>(ATT_OP_READ_BY_TYPE_REQ, ATT_OP_READ_BY_TYPE_RESP, 
-			[&](int start, int end)
-			{
-				send_read_by_type(uuid, start, end);	
-			},
-			[](const GATTReadCharacteristic& p, int i)
-			{
-				return make_pair(p.handle(i), p.characteristic(i));
-			},
-			[](const GATTReadCharacteristic& p)
-			{
-				return p.handle(p.num_elements()-1);
-			});
-	}
-
-	vector<tuple<uint16_t, uint16_t, bt_uuid_t>> read_service_group(const bt_uuid_t& uuid)
-	{
-		return read_multiple<tuple<uint16_t, uint16_t, bt_uuid_t>, GATTReadServiceGroup>(ATT_OP_READ_BY_GROUP_REQ, ATT_OP_READ_BY_GROUP_RESP, 
-			[&](int start, int end)
-			{
-				send_read_group_by_type(uuid, start, end);	
-			},
-			[](const GATTReadServiceGroup& p, int i)
-			{
-				return make_tuple(p.start_handle(i),  p.end_handle(i), p.uuid(i));
-			},
-			[](const GATTReadServiceGroup& p)
-			{
-				return p.end_handle(p.num_elements()-1);
-			});
-	}
-
-};
-
-
-#endif
-
 #define log_fd(X) log_fd_(X, __LINE__, __FILE__)
 
 int log_fd_(int fd, int line, const char* file)
@@ -268,7 +58,7 @@ int log_fd_(int fd, int line, const char* file)
 		LOG(Error, "Error on line: " << line << " (" << file << "): " << strerror(errno));
 	}
 	else
-		LOG(Info, "Socket connect success: " << line << " (" << file << ")");
+		LOG(Info, "Socket success: " << line << " (" << file << ")");
 
 	return fd;
 }
@@ -355,7 +145,7 @@ int log_l2cap_options(int sock)
 	//SOL_L2CAP seems to mean that is should operate at the L2CAP level of the stack
 	//L2CAP_OPTIONS who knows?
 	if(log_fd(getsockopt(sock, SOL_L2CAP, L2CAP_OPTIONS, &options, &len)) == -1)
-		return -1
+		return -1;
 
 	LOGVAR(options.omtu);
 	LOGVAR(options.imtu);
@@ -368,15 +158,21 @@ int log_l2cap_options(int sock)
 	return 0;
 }
 
+BLEGATTStateMachine::~BLEGATTStateMachine()
+{
+	close();
+}
+
 BLEGATTStateMachine::BLEGATTStateMachine()
 :dev(sock)
 {
+	ENTER();
 	//The constructor sets up the socket. Unless something is badly broken,
 	//then we should succeed. Therefore errors are an exception.
 
 	//Allocate socket and create endpoint.
 	//Make socket nonblocking so connect() doesn't hang.
-	sock = log_fd(socket(PF_BLUETOOTH, SOCK_SEQPACKET | SOCK_NONBLOCK, BTPROTO_L2CAP));
+	sock = log_fd(::socket(PF_BLUETOOTH, SOCK_SEQPACKET , BTPROTO_L2CAP));
 
 	if(sock == -1)
 		throw SocketAllocationFailed(strerror(errno));
@@ -386,8 +182,6 @@ BLEGATTStateMachine::BLEGATTStateMachine()
 	//I believe that l2 is for an l2cap socket. These are kind of like
 	//UDP in that they have port numbers and are packet oriented.
 	//However they are also ordered and reliable.
-	struct sockaddr_l2 addr;
-		
 	bdaddr_t source_address = {{0,0,0,0,0,0}};  //i.e. the adapter. Note, 0, corresponds to BDADDR_ANY
 	                                //However BDADDR_ANY uses a nonstandard C hack and does not compile
 									//under C++. So, set it manually. :(
@@ -429,18 +223,19 @@ BLEGATTStateMachine::BLEGATTStateMachine()
 	}
 
 	buf.resize(128);
-	//cb_connected();
 }
 
 
-void connect(const string& address)
+void BLEGATTStateMachine::connect(const string& address)
 {
+	ENTER();
 	//Construct an address from the address string
 	
 	//Can also use bacpy to copy addresses about
 
 	str2ba(address.c_str(), &addr.l2_bdaddr);
-	ret = connect(sock, (sockaddr*)&addr, sizeof(addr));
+	int ret = log_fd(::connect(sock, (sockaddr*)&addr, sizeof(addr)));
+
 
 	if(ret == 0)
 	{
@@ -451,11 +246,15 @@ void connect(const string& address)
 
 		cb_connected();
 	}
-	else if(errno = EINPROGRESS)
+	else if(errno == EINPROGRESS)
 	{
 		//This "error" means the connection is happening and
 		//we should come back later after select() returns.
 		state = Connecting;
+	}
+	else
+	{
+		throw SocketConnectFailed(strerror(errno));
 	}
 }
 
@@ -835,6 +634,7 @@ void pretty_print_tree(const BLEGATTStateMachine& s)
 //Handy utility function to do the sort of thing you'd normally do.
 void BLEGATTStateMachine::do_standard_scan(std::function<void()>& cb)
 {
+	ENTER();
 
 	cb_services_read = [this]()
 	{

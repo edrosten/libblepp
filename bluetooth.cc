@@ -45,7 +45,7 @@ int main(int argc, char **argv)
 		exit(1);
 	}
 
-	log_level = Warning;
+	log_level = Trace;
 
 	BLEGATTStateMachine gatt;
 	

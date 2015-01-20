@@ -231,7 +231,6 @@ BLEDevice::BLEDevice(const int& sock_)
 	LOGVAR(options.fcs);
 	LOGVAR(options.max_tx);
 	LOGVAR(options.txwin_size);
-
-	buf.resize(ATT_DEFAULT_MTU);
 */
+	buf.resize(ATT_DEFAULT_MTU);
 }
