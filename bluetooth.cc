@@ -91,6 +91,13 @@ int main(int argc, char **argv)
 				}
 	};
 
+
+	gatt.cb_disconnected = [](BLEGATTStateMachine::Disconnect d)
+	{
+		cerr << "Disconnect for reason " << (int)d << endl;
+		exit(1);
+	};
+
 	gatt.setup_standard_scan(cb);
 
 	gatt.connect(argv[1]);
