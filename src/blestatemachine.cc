@@ -119,14 +119,23 @@ const ServiceInfo* lookup_service_by_UUID(const UUID& uuid)
 }	
 
 
-
 void BLEGATTStateMachine::buggerall()
+{
+}
+
+void BLEGATTStateMachine::buggerall2(Disconnect)
 {
 }
 
 
 void BLEGATTStateMachine::close()
 {
+	reset();
+
+	state = Disconnected;
+	next_handle_to_read=-1;
+	last_request=-1;
+
 	if(sock != -1)
 		log_fd(::close(sock));
 	sock = -1;
@@ -160,6 +169,7 @@ int log_l2cap_options(int sock)
 
 BLEGATTStateMachine::~BLEGATTStateMachine()
 {
+	ENTER();
 	close();
 }
 
@@ -167,12 +177,25 @@ BLEGATTStateMachine::BLEGATTStateMachine()
 :dev(sock)
 {
 	ENTER();
+	close();
+	buf.resize(128);
+}
+
+
+void BLEGATTStateMachine::connect(const string& address, bool blocking)
+{
+	ENTER();
+
 	//The constructor sets up the socket. Unless something is badly broken,
 	//then we should succeed. Therefore errors are an exception.
 
 	//Allocate socket and create endpoint.
 	//Make socket nonblocking so connect() doesn't hang.
-	sock = log_fd(::socket(PF_BLUETOOTH, SOCK_SEQPACKET , BTPROTO_L2CAP));
+
+	if(blocking)
+		sock = log_fd(::socket(PF_BLUETOOTH, SOCK_SEQPACKET                 , BTPROTO_L2CAP));
+	else
+		sock = log_fd(::socket(PF_BLUETOOTH, SOCK_SEQPACKET | SOCK_NONBLOCK , BTPROTO_L2CAP));
 
 	if(sock == -1)
 		throw SocketAllocationFailed(strerror(errno));
@@ -182,9 +205,6 @@ BLEGATTStateMachine::BLEGATTStateMachine()
 	//I believe that l2 is for an l2cap socket. These are kind of like
 	//UDP in that they have port numbers and are packet oriented.
 	//However they are also ordered and reliable.
-	bdaddr_t source_address = {{0,0,0,0,0,0}};  //i.e. the adapter. Note, 0, corresponds to BDADDR_ANY
-	                                //However BDADDR_ANY uses a nonstandard C hack and does not compile
-									//under C++. So, set it manually. :(
 	//So, a sockaddr_l2 has the family (obviously)
 	//a PSM (wtf?) 
 	//  Protocol Service Multiplexer (WTF?)
@@ -200,39 +220,18 @@ BLEGATTStateMachine::BLEGATTStateMachine()
 	addr.l2_cid = htobs(LE_ATT_CID);
 
 
-	bacpy(&addr.l2_bdaddr, &source_address);
-
 	//Address type: Low Energy public
 	addr.l2_bdaddr_type=BDADDR_LE_PUBLIC;
 	
-	//Bind socket. This associates it with a particular adapter.
-	//We chose ANY as the source address, so packets will go out of 
-	//whichever adapter necessary.
-	int ret = log_fd(bind(sock, (sockaddr*)&addr, sizeof(addr)));
-
-	if(ret == -1)
-	{
-		close();
-		throw SocketAllocationFailed(strerror(errno));
-	}
 
 	if(log_l2cap_options(sock) == -1)
 	{
-		close();
+		reset();
 		throw SocketGetSockOptFailed(strerror(errno));
 	}
-
-	buf.resize(128);
-}
-
-
-void BLEGATTStateMachine::connect(const string& address)
-{
-	ENTER();
 	//Construct an address from the address string
 	
 	//Can also use bacpy to copy addresses about
-
 	str2ba(address.c_str(), &addr.l2_bdaddr);
 	int ret = log_fd(::connect(sock, (sockaddr*)&addr, sizeof(addr)));
 
@@ -242,7 +241,10 @@ void BLEGATTStateMachine::connect(const string& address)
 		state = Idle;
 
 		if(log_l2cap_options(sock) == -1)
+		{
+			reset();
 			throw SocketGetSockOptFailed(strerror(errno));
+		}
 
 		cb_connected();
 	}
@@ -254,6 +256,7 @@ void BLEGATTStateMachine::connect(const string& address)
 	}
 	else
 	{
+		reset();
 		throw SocketConnectFailed(strerror(errno));
 	}
 }
@@ -271,6 +274,9 @@ void BLEGATTStateMachine::reset()
 	next_handle_to_read=-1;
 	last_request=-1;
 }
+
+
+
 
 void BLEGATTStateMachine::state_machine_write()
 {
@@ -343,19 +349,41 @@ void BLEGATTStateMachine::set_notify_and_indicate(Characteristic& c, bool notify
 }
 
 
+bool BLEGATTStateMachine::wait_on_write()
+{
+	if(state == Connecting)
+		return true;
+	else
+		return false;
+}
+
+void BLEGATTStateMachine::fail(Disconnect d)
+{
+	close();
+	cb_disconnected(d);
+}
+
+void BLEGATTStateMachine::unexpected_error(const PDUErrorResponse& r)
+{
+	PDUErrorResponse err(r);
+	string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
+	LOG(Error, msg);
+	fail(UnexpectedError);
+}
 ////////////////////////////////////////////////////////////////////////////////
 //
 // The state machine itself!
 void BLEGATTStateMachine::read_and_process_next()
 {
+	LOG(Debug, "State is: " << state);
 	if(state == Connecting)
 	{
-
+		//Check the status of the socket
+			
 	}
 	else
 	{
 
-		LOG(Debug, "State is: " << state);
 		PDUResponse r = dev.receive(buf);
 
 		if(r.type() == ATT_OP_HANDLE_NOTIFY || r.type() == ATT_OP_HANDLE_IND)
@@ -383,15 +411,13 @@ void BLEGATTStateMachine::read_and_process_next()
 			
 			std::string msg = string("Unexpected opcode in error. Expected ") + att_op2str(last_request) + " got "  + att_op2str(err.request_opcode());
 			LOG(Error, msg);
-			reset(); // And hope for the best
-			throw StateMachineGoneBad(msg);
+			fail(UnexpectedError);
 		}
 		else if(r.type() != ATT_OP_ERROR && r.type() != last_request + 1)
 		{
 			string msg = string("Unexpected response. Expected ") + att_op2str(last_request+1) + " got "  + att_op2str(r.type());
 			LOG(Error, msg);
-			reset(); // And hope for the best
-			throw StateMachineGoneBad(msg);
+			fail(UnexpectedResponse);
 		}
 		else
 		{
@@ -406,13 +432,7 @@ void BLEGATTStateMachine::read_and_process_next()
 						reset();
 					}
 					else
-					{
-						PDUErrorResponse err(r);
-						string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
-						LOG(Error, msg);
-						reset(); // And hope for the best
-						throw StateMachineGoneBad(msg);
-					}
+						unexpected_error(r);
 				}
 				else
 				{
@@ -451,13 +471,7 @@ void BLEGATTStateMachine::read_and_process_next()
 						cb_find_characteristics();
 					}
 					else
-					{
-						PDUErrorResponse err(r);
-						string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
-						LOG(Error, msg);
-						reset(); // And hope for the best
-						throw StateMachineGoneBad(msg);
-					}
+						unexpected_error(r);
 				}
 				else
 				{
@@ -523,13 +537,7 @@ void BLEGATTStateMachine::read_and_process_next()
 						cb_get_client_characteristic_configuration();
 					}
 					else
-					{
-						PDUErrorResponse err(r);
-						string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
-						LOG(Error, msg);
-						reset(); // And hope for the best
-						throw StateMachineGoneBad(msg);
-					}
+						unexpected_error(r);
 				}
 				else
 				{
@@ -560,12 +568,7 @@ void BLEGATTStateMachine::read_and_process_next()
 			{
 
 				if(r.type() == ATT_OP_ERROR)
-				{
-					PDUErrorResponse err(r);
-					string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
-					LOG(Error, msg);
-					throw StateMachineGoneBad(msg);
-				}
+					unexpected_error(r);
 				else
 				{
 					reset();

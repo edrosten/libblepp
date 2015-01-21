@@ -46,14 +46,16 @@ static int haxx(uint8_t X)
 #define LOGVAR(X) LOG(Info,  #X << " = " << haxx(X))
 
 
-#define test(X) test_fd_(X, __LINE__)
+#define test(X, Y) ::test_fd_<BLEDevice::Y##Error>(X, __LINE__)
 
-void BLEDevice::test_fd_(int fd, int line)
+#define TEST(X, S, B, L) call(X(),S, B, L)
+
+template<class C> void test_fd_(int fd, int line)
 {
 	if(fd < 0)
 	{
 		LOG(Info, "Error on line " << line << "( " << __FILE__ << "): " <<strerror(errno));
-		exit(1);
+		throw C();
 	}
 	else
 		LOG(Debug, "System call on " << line << "( " << __FILE__ << "): " << strerror(errno) << " ret = " << fd);
@@ -65,13 +67,27 @@ void BLEDevice::test_pdu(int len)
 		throw logic_error("Error constructing packet");
 }
 
+class Read{};
+class Write{};
+
+void call(const Write&, int sock, const uint8_t* buf, size_t len, int line)
+{
+	test_fd_<BLEDevice::WriteError>(write(sock, buf, len), line);
+}
+
+
+void call(const Read&, int sock, uint8_t* buf, size_t len, int line)
+{
+	test_fd_<BLEDevice::WriteError>(read(sock, buf, len), line);
+}
+
 
 void BLEDevice::send_read_by_type(const bt_uuid_t& uuid, uint16_t start, uint16_t end)
 {
 	int len = enc_read_by_type_req(start, end, const_cast<bt_uuid_t*>(&uuid), buf.data(), buf.size());
 	test_pdu(len);
 	int ret = write(sock, buf.data(), len);
-	test(ret);
+	test(ret, Write);
 }
 
 void BLEDevice::send_find_information(uint16_t start, uint16_t end)
@@ -79,7 +95,7 @@ void BLEDevice::send_find_information(uint16_t start, uint16_t end)
 	int len = enc_find_info_req(start, end, buf.data(), buf.size());
 	test_pdu(len);
 	int ret = write(sock, buf.data(), len);
-	test(ret);
+	test(ret, Write);
 }
 
 void BLEDevice::send_read_group_by_type(const bt_uuid_t& uuid, uint16_t start, uint16_t end)
@@ -87,7 +103,7 @@ void BLEDevice::send_read_group_by_type(const bt_uuid_t& uuid, uint16_t start, u
 	int len = enc_read_by_grp_req(start, end, const_cast<bt_uuid_t*>(&uuid), buf.data(), buf.size());
 	test_pdu(len);
 	int ret = write(sock, buf.data(), len);
-	test(ret);
+	test(ret, Write);
 }
 
 void BLEDevice::send_write_request(uint16_t handle, const uint8_t* data, int length)
@@ -95,7 +111,7 @@ void BLEDevice::send_write_request(uint16_t handle, const uint8_t* data, int len
 	int len = enc_write_req(handle, data, length, buf.data(), buf.size());
 	test_pdu(len);
 	int ret = write(sock, buf.data(), len);
-	test(ret);
+	test(ret, Write);
 }
 
 void BLEDevice::send_write_request(uint16_t handle, uint16_t data)
@@ -109,7 +125,7 @@ void BLEDevice::send_handle_value_confirmation()
 	int len = enc_confirmation(buf.data(), buf.size());
 	test_pdu(len);
 	int ret = write(sock, buf.data(), len);
-	test(ret);
+	test(ret, Write);
 }
 
 void BLEDevice::send_write_command(uint16_t handle, const uint8_t* data, int length)
@@ -117,7 +133,7 @@ void BLEDevice::send_write_command(uint16_t handle, const uint8_t* data, int len
 	int len = enc_write_cmd(handle, data, length, buf.data(), buf.size());
 	test_pdu(len);
 	int ret = write(sock, buf.data(), len);
-	test(ret);
+	test(ret, Write);
 }
 
 void BLEDevice::send_write_command(uint16_t handle, uint16_t data)
@@ -130,7 +146,7 @@ void BLEDevice::send_write_command(uint16_t handle, uint16_t data)
 PDUResponse BLEDevice::receive(uint8_t* buf, int max)
 {
 	int len = read(sock, buf, max);
-	test(len);
+	test(len, Read);
 	pretty_print(PDUResponse(buf, len));
 	return PDUResponse(buf, len);
 }

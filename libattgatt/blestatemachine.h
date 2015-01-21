@@ -230,13 +230,25 @@ const ServiceInfo* lookup_service_by_UUID(const UUID& uuid);
 
 class BLEGATTStateMachine
 {
+	public:
+
+		enum Disconnect{
+			ConnectionFailed,
+			UnexpectedError,
+			UnexpectedResponse,
+			WriteError,
+			ReadError,
+			ConnectionClosed
+		};
+
 	private:
 		struct sockaddr_l2 addr;
 		
-		int sock;
+		int sock = -1;
 
 
 		static void buggerall();
+		static void buggerall2(Disconnect);
 
 		BLEDevice dev;
 		
@@ -256,13 +268,16 @@ class BLEGATTStateMachine
 
 		void reset();
 		void state_machine_write();
-		void close();
+		void unexpected_error(const PDUErrorResponse&);
+		void fail(Disconnect);
 
 	public:
+
 
 		std::vector<PrimaryService> primary_services;
 
 		std::function<void()> cb_connected = buggerall;
+		std::function<void(Disconnect)> cb_disconnected = buggerall2;
 		std::function<void()> cb_services_read = buggerall;
 		std::function<void()> cb_notify = buggerall;
 		std::function<void()> cb_find_characteristics = buggerall;
@@ -275,11 +290,13 @@ class BLEGATTStateMachine
 		~BLEGATTStateMachine();
 
 		
-		void connect(const std::string& address);
+		void connect(const std::string& addresa, bool blocking=true);
 
+		void close();
 
 		int socket();
-		
+	
+		bool wait_on_write();
 
 
 		void read_primary_services();

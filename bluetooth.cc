@@ -94,9 +94,9 @@ int main(int argc, char **argv)
 	gatt.setup_standard_scan(cb);
 
 	gatt.connect(argv[1]);
-	
+/*	
 
-	
+	cout << "Hello\n";	
 	char spin[]=R"(-\|/)";
 	for(int i=0; ; i++)
 	{
@@ -106,7 +106,7 @@ int main(int argc, char **argv)
 		FD_SET(gatt.socket(), &wrset);
 		struct timeval tv;
 		tv.tv_sec = 0;
-		tv.tv_usec = 100000;
+		tv.tv_usec = 50000;
 		int result = select(gatt.socket() + 1, NULL, &wrset, NULL, & tv);
 		
 		if(result == 0)
@@ -119,6 +119,9 @@ int main(int argc, char **argv)
 
 	}
 
+	cout << "dfpdsofpo\n";
+
+	gatt.cb_connected();*/
 
 	try{
 		for(;;)
