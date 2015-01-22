@@ -40,6 +40,7 @@ void bin(uint8_t i)
 
 int main(int argc, char **argv)
 {
+	cerr << "Hello, my name is Inigo Montoya\n";
 	if(argc != 2)
 	{	
 		cerr << "Please supply address.\n";
@@ -56,6 +57,8 @@ int main(int argc, char **argv)
 
 	deque<int> points;
 
+
+	//Function that reads an indication and formats it for plotting.
 	std::function<void(const PDUNotificationOrIndication&)> notify_cb = [&](const PDUNotificationOrIndication& n)
 	{
 		//This particular device sends 16 bit integers.
@@ -80,8 +83,11 @@ int main(int argc, char **argv)
 	};
 
 
-
+	//Search for the service and attribute and set up notifications and the appropriate callback.
 	std::function<void()> cb = [&gatt, &notify_cb](){
+
+		pretty_print_tree(gatt);
+
 		for(auto& service: gatt.primary_services)
 			for(auto& characteristic: service.characteristics)
 				if(service.uuid == UUID("7309203e-349d-4c11-ac6b-baedd1819764") && characteristic.uuid == UUID("53f72b8c-ff27-4177-9eee-30ace844f8f2"))
@@ -91,16 +97,59 @@ int main(int argc, char **argv)
 				}
 	};
 
-
+	//Set up callback for disconnection
 	gatt.cb_disconnected = [](BLEGATTStateMachine::Disconnect d)
 	{
 		cerr << "Disconnect for reason " << (int)d << endl;
 		exit(1);
 	};
 
+	//Almost always we want to query the whole service/attribute tree
+	//So, there is a function to do this automatically.
 	gatt.setup_standard_scan(cb);
 
-	gatt.connect(argv[1]);
+	
+	//By default connect is a blocking call.
+	gatt.connect(argv[1], false);
+
+
+	
+	fd_set write_set, read_set;
+
+	for(;;)
+	{
+		FD_ZERO(&read_set);
+		FD_ZERO(&write_set);
+
+		//Reads are always a possibility due to asynchronus notifications.
+		FD_SET(gatt.socket(), &read_set);
+		
+		if(gatt.wait_on_write())
+			FD_SET(gatt.socket(), &write_set);
+			
+		
+		struct timeval tv;
+		tv.tv_sec = 0;
+		tv.tv_usec = 10000;
+		int result = select(gatt.socket() + 1, &read_set, &write_set, NULL, & tv);
+
+		if(FD_ISSET(gatt.socket(), &write_set))
+		{
+			cerr << "Write available\n";
+			gatt.write_and_process_next();
+		}
+
+		if(FD_ISSET(gatt.socket(), &read_set))
+			gatt.read_and_process_next();
+
+		cerr << ".";
+
+	}
+
+
+
+
+
 /*	
 
 	cout << "Hello\n";	

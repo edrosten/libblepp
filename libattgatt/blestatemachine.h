@@ -303,6 +303,7 @@ class BLEGATTStateMachine
 		void find_all_characteristics();
 		void get_client_characteristic_configuration();
 		void read_and_process_next();
+		void write_and_process_next();
 		void set_notify_and_indicate(Characteristic& c, bool notify, bool indicate);
 
 

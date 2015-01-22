@@ -68,6 +68,14 @@ void pretty_print(const PDUResponse& pdu)
 		else if(pdu.type() == ATT_OP_WRITE_RESP)
 		{
 		}
+		else if(pdu.type() == ATT_OP_HANDLE_NOTIFY || pdu.type() == ATT_OP_HANDLE_IND)
+		{
+			PDUNotificationOrIndication p(pdu);
+			cerr << "debug: handle = " << p.handle() << endl;
+			cerr << "debug: data = " << to_hex(p.value().first, p.value().second - p.value().first) << endl;
+			cerr << "debug: data = " << to_str(p.value().first, p.value().second - p.value().first) << endl;
+
+		}
 		else
 			cerr << "debug: --no pretty printer available--\n";
 		
