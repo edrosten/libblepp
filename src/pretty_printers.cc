@@ -56,7 +56,11 @@ std::string to_str(const bt_uuid_t& uuid)
 	if(uuid.type == BT_UUID16)
 		return to_hex(uuid.value.u16);
 	else if(uuid.type == BT_UUID128)
-		return "--128--";
+	{
+		char s[] = "xoxoxoxo-xoxo-xoxo-xoxo-xoxoxoxoxoxo";
+		bt_uuid_to_string(&uuid, s, sizeof(s));
+		return s;
+	}
 	else
 		return "uuid.wtf";
 

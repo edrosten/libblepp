@@ -241,6 +241,8 @@ class BLEGATTStateMachine
 			ConnectionClosed
 		};
 
+		static const char* get_disconnect_string(Disconnect); 
+
 	private:
 		struct sockaddr_l2 addr;
 		
@@ -271,6 +273,7 @@ class BLEGATTStateMachine
 		void unexpected_error(const PDUErrorResponse&);
 		void fail(Disconnect);
 
+		void connect(const std::string& addresa, bool blocking);
 	public:
 
 
@@ -290,7 +293,8 @@ class BLEGATTStateMachine
 		~BLEGATTStateMachine();
 
 		
-		void connect(const std::string& addresa, bool blocking=true);
+		void connect_blocking(const std::string& addres);
+		void connect_nonblocking(const std::string& addres);
 
 		void close();
 

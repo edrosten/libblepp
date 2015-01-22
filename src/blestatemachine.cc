@@ -37,6 +37,7 @@
 using namespace std;
 
 
+
 template<class C> const C& haxx(const C& X)
 {
 	return X;
@@ -62,6 +63,21 @@ int log_fd_(int fd, int line, const char* file)
 
 	return fd;
 }
+
+const char* BLEGATTStateMachine::get_disconnect_string(Disconnect d)
+{
+	switch(d)
+	{
+		case ConnectionFailed: return "Connection failed.";
+		case UnexpectedError: return "Unexpected Error.";
+		case UnexpectedResponse: return "Unexpected Response.";
+		case WriteError: return "Write Error.";
+		case ReadError: return "Read Error.";
+		case ConnectionClosed: return "Connection Closed.";
+		default: return "Unknown reason.";
+	}
+}
+
 
 
 const ServiceInfo* lookup_service_by_UUID(const UUID& uuid)
@@ -181,6 +197,16 @@ BLEGATTStateMachine::BLEGATTStateMachine()
 	buf.resize(128);
 }
 
+void BLEGATTStateMachine::connect_blocking(const string& address)
+{
+	connect(address, true);
+}
+
+
+void BLEGATTStateMachine::connect_nonblocking(const string& address)
+{
+	connect(address, false);
+}
 
 void BLEGATTStateMachine::connect(const string& address, bool blocking)
 {
@@ -234,6 +260,7 @@ void BLEGATTStateMachine::connect(const string& address, bool blocking)
 	//Can also use bacpy to copy addresses about
 	str2ba(address.c_str(), &addr.l2_bdaddr);
 	int ret = log_fd(::connect(sock, (sockaddr*)&addr, sizeof(addr)));
+	
 
 
 	if(ret == 0)
@@ -253,6 +280,11 @@ void BLEGATTStateMachine::connect(const string& address, bool blocking)
 		//This "error" means the connection is happening and
 		//we should come back later after select() returns.
 		state = Connecting;
+	}
+	else if(errno == ENETUNREACH || errno == EHOSTUNREACH)
+	{
+		close();
+		cb_disconnected(ConnectionFailed);
 	}
 	else
 	{
