@@ -22,10 +22,12 @@
 
 
 #include <iostream>
+#include <sstream>
 #include <iomanip>
 #include <libattgatt/blestatemachine.h>
 #include <libattgatt/float.h>
 #include <deque>
+#include <sys/time.h>
 #include <unistd.h>
 #include "cxxgplot.h"  //lolzworthy plotting program
 using namespace std;
@@ -51,6 +53,12 @@ string throbber(int i)
 }
 
 
+double get_time_of_day()
+{
+        struct timeval tv;
+        gettimeofday(&tv,NULL);
+        return tv.tv_sec+tv.tv_usec * 1e-6;
+}
 ////////////////////////////////////////////////////////////////////////////////
 //
 // This program demonstrates the use of the library
@@ -77,7 +85,9 @@ int main(int argc, char **argv)
 	cplot::Plotter plot;
 	plot.range = " [ ] [0:1000] ";
 	deque<int> points;
+	
 
+	int prev_count=-1;
 	////////////////////////////////////////////////////////////////////////////////	
 	//
 	// This is important! This is an example of a callback which responds to 
@@ -85,6 +95,8 @@ int main(int argc, char **argv)
 	// automatically to indications. Maybe that will change.
 	//
 	//Function that reads an indication and formats it for plotting.
+	int c=0;
+	double prev_t = get_time_of_day();
 	std::function<void(const PDUNotificationOrIndication&)> notify_cb = [&](const PDUNotificationOrIndication& n)
 	{
 		//This particular device sends 16 bit integers.
@@ -96,14 +108,39 @@ int main(int argc, char **argv)
 		bin(d[1]);
 		cout << " ";
 		bin(d[0]);
-		cout << endl;
+	
+		//After the 16 bit int, it sends a 32 bit int
+		int32_t count, adc_count, adc_resp;
+		count = d[2] | (d[3]<<8) | (d[4]<<16) | (d[5]<<24);
+		adc_count = d[6] | (d[7]<<8) | (d[8]<<16) | (d[9]<<24);
+		adc_resp = d[10] | (d[11]<<8) | (d[12]<<16) | (d[13]<<24);
+
+
+		cout << " count: " << count << " adccount: " << adc_count/14 << " " << adc_count << " " << adc_resp;
+
+		if(count != prev_count+1)
+			cout << " MISSED PACKET!!";
+
+		prev_count = count;
 		
+		c++;
+		if(c> 20)
+		{
+			double t = get_time_of_day();
+			cout << " " << 1/((t - prev_t)/c) << " packets / s";
+
+			prev_t = t;
+			c=0;
+		}
+
+		cout << endl;
+
 		//Format the points and send the results to the plotting program.
 		points.push_back(val);
 		if(points.size() > 100)
 			points.pop_front();
 		
-		plot.newline("line lw 10 lt 0 title \"\"");
+		plot.newline("line lw 10 lt 0 title \"" + static_cast<ostringstream&>(ostringstream().flush()<<count).str() + "\"" );
 		plot.addpts(points);
 
 		plot.draw();
