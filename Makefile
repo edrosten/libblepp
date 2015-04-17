@@ -4,12 +4,14 @@ CFLAGS+= -Wall -Wextra -g -ggdb -I .
 
 
 
-OBJS=bluetooth.o src/att.o src/uuid.o src/logging.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o
+OBJS=src/att.o src/uuid.o src/logging.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o
 
 
 
+blelogger: $(OBJS) blelogger.o
+	$(CXX) -o $@ $^ -lbluetooth
 
-prog: $(OBJS)
+prog: $(OBJS) bluetooth.o
 	$(CXX) -o $@ $^ -lbluetooth
 
 .PHONY: clean
