@@ -240,6 +240,15 @@ void BLEGATTStateMachine::connect(const string& address, bool blocking)
 	//and an address type (wtf)
 	//Holy cargo cult, Batman!
 
+
+	sockaddr_l2 sba;
+	memset(&sba, 0, sizeof(sba));
+	sba.l2_bdaddr={{0,0,0,0,0,0}};
+	sba.l2_family=AF_BLUETOOTH;
+	sba.l2_cid = htobs(LE_ATT_CID);
+	sba.l2_bdaddr_type=BDADDR_LE_PUBLIC;
+	log_fd(bind(sock, (sockaddr*)&sba , sizeof(sba)));
+
 	memset(&addr, 0, sizeof(addr));
 	addr.l2_family = AF_BLUETOOTH;
 	addr.l2_psm = 0;
@@ -257,8 +266,14 @@ void BLEGATTStateMachine::connect(const string& address, bool blocking)
 	}
 	//Construct an address from the address string
 	
+	
+	
+
+
 	//Can also use bacpy to copy addresses about
-	str2ba(address.c_str(), &addr.l2_bdaddr);
+	int rr = str2ba(address.c_str(), &addr.l2_bdaddr);
+	LOG(Debug, "address = " << address);
+	LOG(Debug, "str2ba = " << rr);
 	int ret = log_fd(::connect(sock, (sockaddr*)&addr, sizeof(addr)));
 	
 
