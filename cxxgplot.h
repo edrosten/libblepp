@@ -17,7 +17,7 @@ namespace cplot
 	{
 		//std::vector<plot> plots;
 
-		std::vector<std::string> plots, pdata;
+		std::vector<std::string> plots, pdata, extra;
 		redi::opstream plot;
 
 		public:
@@ -34,6 +34,11 @@ namespace cplot
 			std::ostream& s()
 			{
 				return plot;
+			}
+
+			void add_extra(const std::string& s)
+			{
+				extra.push_back(s);
 			}
 
 			Plotter& newline(const std::string& ps)
@@ -138,8 +143,13 @@ namespace cplot
 
 				if(data)
 					plot << std::flush;
+
+				for(unsigned int i=0; i < extra.size(); i++)
+						plot << extra[i] << "\n";
+
 				
 				plots.clear();
+				extra.clear();
 				pdata.clear();
 				newline("");
 			}

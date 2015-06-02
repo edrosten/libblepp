@@ -301,7 +301,11 @@ class BLEGATTStateMachine
 		int socket();
 	
 		bool wait_on_write();
-
+		
+		bool is_idle()
+		{
+			return state == Idle;
+		}
 
 		void read_primary_services();
 		void find_all_characteristics();

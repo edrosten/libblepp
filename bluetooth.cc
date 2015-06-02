@@ -86,8 +86,10 @@ int main(int argc, char **argv)
 	plot.range = " [ ] [0:1000] ";
 	deque<int> points;
 	
+	int count = -1;
+	double prev_time = 0;
+	float voltage=0;
 
-	int prev_count=-1;
 	////////////////////////////////////////////////////////////////////////////////	
 	//
 	// This is important! This is an example of a callback which responds to 
@@ -95,53 +97,52 @@ int main(int argc, char **argv)
 	// automatically to indications. Maybe that will change.
 	//
 	//Function that reads an indication and formats it for plotting.
-	int c=0;
-	double prev_t = get_time_of_day();
 	std::function<void(const PDUNotificationOrIndication&)> notify_cb = [&](const PDUNotificationOrIndication& n)
 	{
+		if(count == -1)
+		{
+			prev_time = get_time_of_day();
+		}
+		count++;
+		
+		if(count == 10)
+		{
+			double t = get_time_of_day();
+			cout << 10 / (t-prev_time)  << " packets per second\n";
+			
+			prev_time = t;
+			count=0;
+		}
+
+
+
 		//This particular device sends 16 bit integers.
 		//Extract them and both print them in binary and send them to the plotting program
 		const uint8_t* d = n.value().first;
 		int val = ((0+d[1] *256 + d[0])>>0) ;
 
-		cout << "Hello: "  << dec  << setfill('0') << setw(6) << val << dec << " ";
-		bin(d[1]);
-		cout << " ";
-		bin(d[0]);
-	
-		//After the 16 bit int, it sends a 32 bit int
-		int32_t count, adc_count, adc_resp;
-		count = d[2] | (d[3]<<8) | (d[4]<<16) | (d[5]<<24);
-		adc_count = d[6] | (d[7]<<8) | (d[8]<<16) | (d[9]<<24);
-		adc_resp = d[10] | (d[11]<<8) | (d[12]<<16) | (d[13]<<24);
+		int16_t bv = d[6] | (d[7] << 8);
 
+		if(bv != -32768)
+			voltage = bv / 1000.0;
 
-		cout << " count: " << count << " adccount: " << adc_count/14 << " " << adc_count << " " << adc_resp;
+		//cout << "Hello: "  << dec  << setfill('0') << setw(6) << val << dec << " ";
+		//bin(d[1]);
+		//cout << " ";
+		//bin(d[0]);
 
-		if(count != prev_count+1)
-			cout << " MISSED PACKET!!";
-
-		prev_count = count;
-		
-		c++;
-		if(c> 20)
-		{
-			double t = get_time_of_day();
-			cout << " " << 1/((t - prev_t)/c) << " packets / s";
-
-			prev_t = t;
-			c=0;
-		}
-
-		cout << endl;
+		//cout << endl;
 
 		//Format the points and send the results to the plotting program.
 		points.push_back(val);
 		if(points.size() > 100)
 			points.pop_front();
 		
-		plot.newline("line lw 10 lt 0 title \"" + static_cast<ostringstream&>(ostringstream().flush()<<count).str() + "\"" );
+		plot.newline("line lw 10 lt 0 title \"\"");
 		plot.addpts(points);
+		ostringstream os;
+		os << "set title \"Voltage: " << voltage << "\"";
+		plot.add_extra(os.str());
 
 		plot.draw();
 	};
@@ -158,7 +159,8 @@ int main(int argc, char **argv)
 	// notifications on a device I have. You will need to modify this!
 	//
 	// Search for the service and attribute and set up notifications and the appropriate callback.
-	std::function<void()> cb = [&gatt, &notify_cb](){
+	bool enable=true;
+	std::function<void()> cb = [&gatt, &notify_cb, &enable](){
 
 		pretty_print_tree(gatt);
 
@@ -166,8 +168,9 @@ int main(int argc, char **argv)
 			for(auto& characteristic: service.characteristics)
 				if(service.uuid == UUID("7309203e-349d-4c11-ac6b-baedd1819764") && characteristic.uuid == UUID("53f72b8c-ff27-4177-9eee-30ace844f8f2"))
 				{
+					cout << "woooo\n";
 					characteristic.cb_notify_or_indicate = notify_cb;
-					characteristic.set_notify_and_indicate(true, false);
+					characteristic.set_notify_and_indicate(enable, false);
 				}
 	};
 	
@@ -264,6 +267,12 @@ int main(int argc, char **argv)
 					gatt.read_and_process_next();
 
 				cout << throbber(i) << flush;
+/*
+				if(i % 100 == 0 && gatt.is_idle())
+				{
+					enable = !enable;
+					cb();
+				}*/
 
 			}
 		}
