@@ -279,9 +279,9 @@ int main(int argc, char **argv)
 			{
 				if(steady_clock::now() - open_time > time_until_close)
 				{
-					cout << "Issuing thumb close\n";
-					motor_B->write_request(0);
-					motor_b_pos = 0;
+					cout << "Issuing finger close\n";
+					motor_A->write_request(0);
+					motor_a_pos = 0;
 					state = WaitForFinger;
 					can_write=0;
 					thumb_close_time=steady_clock::now();
@@ -291,9 +291,9 @@ int main(int argc, char **argv)
 			{
 				if(steady_clock::now() - thumb_close_time > finger_delay)
 				{
-					cout << "Issuing finger close\n";
-					motor_A->write_request(0);
-					motor_a_pos = 0;
+					cout << "Issuing thumb close\n";
+					motor_B->write_request(0);
+					motor_b_pos = 0;
 					state = Idle;
 					can_write=0;
 				}
