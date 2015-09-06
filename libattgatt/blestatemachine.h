@@ -185,6 +185,9 @@ struct Characteristic
 	void set_notify_and_indicate(bool , bool);
 	std::function<void(const PDUNotificationOrIndication&)> cb_notify_or_indicate;
 
+	void write_request(const uint8_t* data, int length);
+	void write_request(uint8_t data);
+
 	//Flags indicating various properties
 	bool broadcast, read, write_without_response, write, notify, indicate, authenticated_write, extended;
 
@@ -306,6 +309,8 @@ class BLEGATTStateMachine
 		{
 			return state == Idle;
 		}
+		
+		void send_write_request(uint16_t handle, const uint8_t* data, int length);
 
 		void read_primary_services();
 		void find_all_characteristics();

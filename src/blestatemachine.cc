@@ -344,6 +344,11 @@ void BLEGATTStateMachine::state_machine_write()
 			last_request = ATT_OP_READ_BY_TYPE_REQ;	
 			dev.send_read_by_type(UUID(GATT_CLIENT_CHARACTERISTIC_CONFIGURATION), next_handle_to_read, 0xffff);	
 		}
+		else if(state == AwaitingWriteResponse)
+		{
+			last_request = ATT_OP_WRITE_REQ;
+			//data already sent
+		}
 	}
 	catch(BLEDevice::WriteError)
 	{
@@ -704,7 +709,27 @@ void BLEGATTStateMachine::read_and_process_next()
 		fail(ReadError);
 	}
 }
-		
+	
+
+void BLEGATTStateMachine::send_write_request(uint16_t handle, const uint8_t* data, int length)
+{
+	if(state != Idle)
+		throw logic_error("Error trying to issue command mid state");
+	dev.send_write_request(handle, data, length);
+	state = AwaitingWriteResponse;
+	state_machine_write();
+}
+
+void Characteristic::write_request(const uint8_t*data, int length)
+{
+	s->send_write_request(value_handle, data, length);
+}
+
+
+void Characteristic::write_request(const uint8_t data)
+{
+	s->send_write_request(value_handle, &data, 1);
+}
 
 void Characteristic::set_notify_and_indicate(bool notify, bool indicate)
 {
