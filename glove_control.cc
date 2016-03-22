@@ -1,26 +1,3 @@
-/*
- *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
- *
- *  Copyright (C) 2013, 2014 Edward Rosten
- *
- *  This program is free software; you can redistribute it and/or modify
- *  it under the terms of the GNU General Public License as published by
- *  the Free Software Foundation; either version 2 of the License, or
- *  (at your option) any later version.
- *
- *  This program is distributed in the hope that it will be useful,
- *  but WITHOUT ANY WARRANTY; without even the implied warranty of
- *  MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
- *  GNU General Public License for more details.
- *
- *  You should have received a copy of the GNU General Public License
- *  along with this program; if not, write to the Free Software
- *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
- *
- */
-
-
 #include <iostream>
 #include <sstream>
 #include <iomanip>
@@ -33,6 +10,9 @@
 
 using namespace std;
 using namespace std::chrono;
+
+
+#include "cxxgplot.h"  //lolzworthy plotting program
 
 void bin(uint8_t i)
 {
@@ -69,11 +49,11 @@ void sane()
 
 int main(int argc, char **argv)
 {
-	if(argc != 2)
+	if(argc != 3)
 	{	
 		cerr << "Please supply address.\n";
 		cerr << "Usage:\n";
-		cerr << "prog address\n";
+		cerr << "prog dotaddress gloveaddress\n";
 		exit(1);
 	}
 
@@ -82,9 +62,111 @@ int main(int argc, char **argv)
 
 	log_level = Info;
 
+	BLEGATTStateMachine dotgatt;
+
+	//This is a cheap and cheerful plotting system using gnuplot.
+	//Ignore this if you don't care about plotting.
+	cplot::Plotter plot;
+	plot.range = " [ ] [0:1000] ";
+	deque<int> points;
+	
+	int count = -1;
+	double prev_time = 0;
+	float voltage=0;
+
+	float threshold = 400;
+	bool active=0;
+	bool trigger=0;
+
+	////////////////////////////////////////////////////////////////////////////////	
+	//
+	// This is important! This is an example of a callback which responds to 
+	// notifications or indications. Currently, BLEGATTStateMachine responds 
+	// automatically to indications. Maybe that will change.
+	//
+	//Function that reads an indication and formats it for plotting.
+	std::function<void(const PDUNotificationOrIndication&)> dot_notify_cb = [&](const PDUNotificationOrIndication& n)
+	{
+		if(count == -1)
+		{
+			prev_time = get_time_of_day();
+		}
+		count++;
+		
+		if(count == 10)
+		{
+			double t = get_time_of_day();
+			cout << 10 / (t-prev_time)  << " packets per second\n";
+			
+			prev_time = t;
+			count=0;
+		}
+
+
+
+		//This particular device sends 16 bit integers.
+		//Extract them and both print them in binary and send them to the plotting program
+		const uint8_t* d = n.value().first;
+		int val = ((0+d[1] *256 + d[0])>>0) ;
+
+		int16_t bv = d[6] | (d[7] << 8);
+
+		if(bv != -32768)
+			voltage = bv / 1000.0;
+
+
+		//cout << "Hello: "  << dec  << setfill('0') << setw(6) << val << dec << " ";
+		//bin(d[1]);
+		//cout << " ";
+		//bin(d[0]);
+
+		//cout << endl;
+
+		//Format the points and send the results to the plotting program.
+		points.push_back(val);
+		if(points.size() > 100)
+			points.pop_front();
+		
+		plot.newline("line lw 10 lt 0 title \"\"");
+		plot.addpts(points);
+		ostringstream os;
+		os << "set title \"Voltage: " << voltage << "\"";
+		plot.add_extra(os.str());
+
+		plot.draw();
+		
+		if(active && val > threshold)
+		{
+			trigger = true;
+		}
+	};
+	
+	BLEGATTStateMachine gatt;
+	bool gattinit=0;
+	
+	
+	std::function<void()> dot_connected_cb = [&](){
+
+		pretty_print_tree(dotgatt);
+
+		for(auto& service: dotgatt.primary_services)
+			for(auto& characteristic: service.characteristics)
+				if(service.uuid == UUID("7309203e-349d-4c11-ac6b-baedd1819764") && characteristic.uuid == UUID("53f72b8c-ff27-4177-9eee-30ace844f8f2"))
+				{
+					cout << "woooo\n";
+					characteristic.cb_notify_or_indicate = dot_notify_cb;
+					characteristic.set_notify_and_indicate(true, false);
+
+					cout << "**********\n";
+					gatt.connect_nonblocking(argv[2]);
+					cout << "**********\n";
+					gattinit = 1;
+				}
+	};
+	
+	dotgatt.setup_standard_scan(dot_connected_cb);
 	
 	//This is the interface to the BLE protocol.
-	BLEGATTStateMachine gatt;
 	
 	auto motor_A_UUID = UUID("ec082d84-17a3-4ce4-a6c2-4121ea9a6d25");
 	auto motor_B_UUID = UUID("ec082d84-17a3-4ce4-a6c2-4121ea9a6d26");
@@ -161,7 +243,8 @@ int main(int argc, char **argv)
 	try
 	{ 
 		//Connect as a non blocking call
-		gatt.connect_nonblocking(argv[1]);
+		dotgatt.connect_nonblocking(argv[1]);
+		//gatt.connect_nonblocking(argv[2]);
 
 
 
@@ -171,41 +254,60 @@ int main(int argc, char **argv)
 		//transferrable to poll(), epoll(), libevent and so on.
 		fd_set write_set, read_set;
 
+
 		for(int i=0;;i++)
 		{
 			FD_ZERO(&read_set);
 			FD_ZERO(&write_set);
 
 			//Reads are always a possibility due to asynchronus notifications.
-			FD_SET(gatt.socket(), &read_set);
+			if(gattinit)
+				FD_SET(gatt.socket(), &read_set);
+			FD_SET(dotgatt.socket(), &read_set);
 			//Listen on stdin as well
 			FD_SET(0, &read_set);
 
 			//Writes are usually available, so only check for them when the 
 			//state machine wants to write.
-			if(gatt.wait_on_write())
-				FD_SET(gatt.socket(), &write_set);
+			if(gattinit)
+				if(gatt.wait_on_write())
+					FD_SET(gatt.socket(), &write_set);
+
+			if(dotgatt.wait_on_write())
+				FD_SET(dotgatt.socket(), &write_set);
 
 
 			struct timeval tv;
 			tv.tv_sec = 0;
-			tv.tv_usec = 10000;
-			int result = select(gatt.socket() + 1, &read_set, &write_set, NULL, & tv);
+			tv.tv_usec = 4000;
 
-			if(FD_ISSET(gatt.socket(), &write_set))
-				gatt.write_and_process_next();
+			int hii = dotgatt.socket();
+			if(gattinit)
+				hii = max(hii, gatt.socket());
+			int result = select(hii + 1, &read_set, &write_set, NULL, & tv);
 
-			if(FD_ISSET(gatt.socket(), &read_set))
-				gatt.read_and_process_next();
+			if(gattinit)
+				if(FD_ISSET(gatt.socket(), &write_set))
+					gatt.write_and_process_next();
+
+			if(FD_ISSET(dotgatt.socket(), &write_set))
+				dotgatt.write_and_process_next();
+
+			if(gattinit)
+				if(FD_ISSET(gatt.socket(), &read_set))
+					gatt.read_and_process_next();
 			
+			if(FD_ISSET(dotgatt.socket(), &read_set))
+				dotgatt.read_and_process_next();
+
 			if(FD_ISSET(0, &read_set))
 			{	
-				char c;
+				char c=0;
 				read(0, &c, 1);
 
 				cout << "Read character " << c << "\r\n" << flush;
 
-				if(!gatt.wait_on_write() && can_write)
+				if(gattinit && !gatt.wait_on_write() && can_write)
 				{
 					if(c == 'q')
 					{
@@ -255,7 +357,23 @@ int main(int argc, char **argv)
 						state = SendThumbRetractNext;
 						can_write=0;
 					}
+					else if(c == 'x')
+					{
+						active = true;
+					}
 				}
+			}
+
+			if(state != Idle)
+				trigger=false;
+
+			if(can_write && state == Idle && trigger == true && active)
+			{
+				motor_A->write_request(a_retracted);
+				motor_a_pos = a_retracted;
+				state = SendThumbRetractNext;
+				can_write=0;
+				trigger = false;
 			}
 
 			if(can_write && state == SendThumbZeroNext)
@@ -316,9 +434,12 @@ int main(int argc, char **argv)
 	{
 		cerr << "Something's stopping bluetooth working: " << e.what() << endl;
 	}
-	catch(std::logic_error e)
+	/*catch(std::logic_error e)
 	{
 		cerr << "Oops, someone fouled up: " << e.what() << endl;
-	}
+	}*/
 
 }
+
+
+

@@ -27,6 +27,7 @@ namespace cplot
 			Plotter()
 			:plot("gnuplot")
 			{
+				plot << "set term x11 noraise\n";
 				newline("");
 			}
 

@@ -83,7 +83,7 @@ int main(int argc, char **argv)
 	//This is a cheap and cheerful plotting system using gnuplot.
 	//Ignore this if you don't care about plotting.
 	cplot::Plotter plot;
-	plot.range = " [ ] [0:1000] ";
+	plot.range = " [ ] [0:] ";
 	deque<int> points;
 	
 	int count = -1;
