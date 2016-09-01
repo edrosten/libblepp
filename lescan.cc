@@ -279,6 +279,7 @@ class HCIScanner
 		//
 		//TODO: replace some errors with throw.
 		//such as the HCI device spewing crap.
+		public:
 		bool parse_packet(const vector<uint8_t>& p)
 		{
 			Span<uint8_t> packet(p);
@@ -441,32 +442,13 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 int main()
 {
 	HCIScanner scanner;
-
-	unsigned char *ptr;
-	int len;
+	log_level = LogLevels::Info;
 
 	while (1) {
-		evt_le_meta_event *meta;
-		le_advertising_info *info;
-		char addr[18];
-
 		vector<uint8_t> buf = scanner.read_with_retry();
 		
-
-		ptr = buf.data() + (1 + HCI_EVENT_HDR_SIZE);
-		len -= (1 + HCI_EVENT_HDR_SIZE);
-
-		meta = (evt_le_meta_event*)(void *) ptr;
-
-		if (meta->subevent != 0x02)
-			goto done;
-
-		/* Ignoring multiple reports */
-		info = (le_advertising_info *) (meta->data + 1);
-			ba2str(&info->bdaddr, addr);
-			printf("%s \n", addr);
+		scanner.parse_packet(buf);
 	}
 
-done:;
 
 }
