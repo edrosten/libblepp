@@ -1,8 +1,21 @@
-libattgatt
-----------
+libble++
+---------
 
-Implementaion of the GATT profile for the ATT protocol for Bluetooth Low 
-Energy. This is required to speak to BLE devices.
+Implementation of Bluetooth Low Energy functions in modern C++, without
+the BlueZ DBUS API.
 
+Includes:
+* Scanning for bluetooth packets
 
-See bluetooth.cc for example code.
+* Implmentation of the GATT profile and ATT protocol
+
+* Lots of comments, complete with references to to the specific part og
+  the Bluetooth 4.0 standard.
+
+* Example programs
+
+Design:
+
+Clean, modern C++ with callbacks. Feed it lambdas (or whatever you like)
+to perform an event happens. Access provided to the raw socket FD, so 
+you can select(), poll() or use blocking IO.
