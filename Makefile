@@ -1,4 +1,5 @@
-CXXFLAGS+=-std=c++11 -Wall -Wextra -g -ggdb -I . 
+CXX=g++-5
+CXXFLAGS+=-std=c++14 -Wall -Wextra -g -ggdb -I . 
 CFLAGS+= -Wall -Wextra -g -ggdb -I . 
 
 

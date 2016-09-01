@@ -38,7 +38,7 @@ template<class C> const C& haxx(const C& X)
 	return X;
 }
 
-static int haxx(uint8_t X)
+inline int haxx(uint8_t X)
 {
 	return X;
 }
