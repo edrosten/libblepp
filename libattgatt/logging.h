@@ -46,6 +46,17 @@ static const char* log_types[] =
 
 extern LogLevels log_level;
 
+template<class T> const T& log_no_uint8(const T& a)
+{
+	return a;
+}
+inline int log_no_uint8(uint8_t a)
+{
+	return a;
+}
+
+#define LOGVAR(Y, X) LOG(Y,  #X << " = " << log_no_uint8(X))
+#define LOGVARHEX(Y, X) LOG(Y,  #X << " = " << std::hex <<log_no_uint8(X) <<std::dec)
 #define LOG(X, Y) do{\
 	if(X <= log_level)\
 	{\
