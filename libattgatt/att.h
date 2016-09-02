@@ -173,12 +173,9 @@ static inline uint32_t att_get_u32(const void *ptr)
 
 static inline uint128_t att_get_u128(const void *ptr)
 {
+	//it's an array and always little endian
 	const uint128_t *u128_ptr =(const uint128_t*)  ptr;
-	uint128_t dst;
-
-	btoh128(u128_ptr, &dst);
-
-	return dst;
+	return *u128_ptr;
 }
 
 static inline void att_put_u8(uint8_t src, void *dst)
@@ -198,9 +195,9 @@ static inline void att_put_u32(uint32_t src, void *dst)
 
 static inline void att_put_u128(uint128_t src, void *dst)
 {
+	//it's an array and always little endian
 	uint128_t *d128 = (uint128_t*)dst;
-
-	htob128(&src, d128);
+	*d128 = src;
 }
 
 static inline void att_put_uuid16(bt_uuid_t src, void *dst)

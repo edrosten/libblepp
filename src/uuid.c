@@ -75,6 +75,33 @@ static int bt_uuid128_cmp(const bt_uuid_t *u1, const bt_uuid_t *u2)
 	return memcmp(&u1->value.u128, &u2->value.u128, sizeof(uint128_t));
 }
 
+int bt_uuid16_create(bt_uuid_t *btuuid, uint16_t value)
+{
+	memset(btuuid, 0, sizeof(bt_uuid_t));
+	btuuid->type = BT_UUID16;
+	btuuid->value.u16 = value;
+
+	return 0;
+}
+
+int bt_uuid32_create(bt_uuid_t *btuuid, uint32_t value)
+{
+	memset(btuuid, 0, sizeof(bt_uuid_t));
+	btuuid->type = BT_UUID32;
+	btuuid->value.u32 = value;
+
+	return 0;
+}
+
+int bt_uuid128_create(bt_uuid_t *btuuid, uint128_t value)
+{
+	memset(btuuid, 0, sizeof(bt_uuid_t));
+	btuuid->type = BT_UUID128;
+	btuuid->value.u128 = value;
+
+	return 0;
+}
+
 int bt_uuid_cmp(const bt_uuid_t *uuid1, const bt_uuid_t *uuid2)
 {
 	bt_uuid_t u1, u2;
@@ -147,6 +174,35 @@ static inline int is_uuid16(const char *string)
 	return (strlen(string) == 4 || strlen(string) == 6);
 }
 
+static int bt_string_to_uuid16(bt_uuid_t *uuid, const char *string)
+{
+	uint16_t u16;
+	char *endptr = NULL;
+
+	u16 = strtol(string, &endptr, 16);
+	if (endptr && *endptr == '\0') {
+		bt_uuid16_create(uuid, u16);
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+static int bt_string_to_uuid32(bt_uuid_t *uuid, const char *string)
+{
+	uint32_t u32;
+	char *endptr = NULL;
+
+	u32 = strtol(string, &endptr, 16);
+	if (endptr && *endptr == '\0') {
+		bt_uuid32_create(uuid, u32);
+		return 0;
+	}
+
+	return -EINVAL;
+}
+
+
 static int bt_string_to_uuid128(bt_uuid_t *uuid, const char *string)
 {
 	unsigned int data[16];
@@ -167,36 +223,12 @@ static int bt_string_to_uuid128(bt_uuid_t *uuid, const char *string)
 
 int bt_string_to_uuid(bt_uuid_t *uuid, const char *string)
 {
-	uint32_t uint;
-	char *endptr = NULL;
-
-	memset(uuid, 0, sizeof(bt_uuid_t));
-
-
 	if (is_uuid128(string))
 		return bt_string_to_uuid128(uuid, string);
 	else if (is_uuid32(string))
-	{
-		uint = strtol(string, &endptr, 16);
-		if (endptr && *endptr == '\0') {
-			uuid->type = BT_UUID32;
-			uuid->value.u32 = uint;
-			return 0;
-		}
-		else	
-			return -EINVAL;
-	}
+		return bt_string_to_uuid32(uuid, string);
 	else if (is_uuid16(string))
-	{
-		uint = strtol(string, &endptr, 16);
-		if (endptr && *endptr == '\0') {
-			uuid->type = BT_UUID16;
-			uuid->value.u16 = uint;
-			return 0;
-		}
-		else	
-			return -EINVAL;
-	}
+		return bt_string_to_uuid16(uuid, string);
 
 	return -EINVAL;
 }
