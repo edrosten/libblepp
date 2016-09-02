@@ -9,13 +9,18 @@
 #include <array>
 #include <iomanip>
 #include <vector>
+#include <boost/optional.hpp>
+
 
 #include <stdexcept>
 
 #include <libattgatt/logging.h>
 #include <libattgatt/pretty_printers.h>
+#include <libattgatt/blestatemachine.h> //for UUID. FIXME mofo
+#include <libattgatt/gap.h>
 
 using namespace std;
+using namespace blepp;
 
 
 class Error: public std::runtime_error 
@@ -27,15 +32,14 @@ class Error: public std::runtime_error
 	}
 };
 
-template<class T>
 class Span
 {
 	private:
-		const T* begin;
-		const T* end;
+		const uint8_t* begin;
+		const uint8_t* end;
 
 	public:
-		Span(const std::vector<T>& d)
+		Span(const std::vector<uint8_t>& d)
 		:begin(d.data()),end(begin + d.size())
 		{
 		}
@@ -54,7 +58,7 @@ class Span
 			return s;
 		}	
 
-		const T& operator[](const size_t i) const
+		const uint8_t& operator[](const size_t i) const
 		{
 			//FIXME check bounds
 			if(i >= size())
@@ -62,17 +66,22 @@ class Span
 			return begin[i];
 		}
 
+		bool empty() const
+		{
+			return size()>0;
+		}
+
 		size_t size() const
 		{
 			return end - begin;
 		}
 
-		const T* data() const
+		const uint8_t* data() const
 		{
 			return begin;
 		}
 
-		const T& pop_front()
+		const uint8_t& pop_front()
 		{
 			if(begin == end)
 				throw std::out_of_range("");
@@ -98,6 +107,57 @@ namespace HCI
 	};
 
 }
+
+
+//Is this the best design. I'm not especially convinced.
+//It seems pretty wretched.
+struct AdvertisingResponse
+{
+	struct Name
+	{
+		string name;
+		bool complete;
+	};
+
+	struct Flags
+	{
+		bool LE_limited_discoverable=0;
+		bool LE_general_discoverable=0;
+		bool BR_EDR_unsupported=0;
+		bool simultaneous_LE_BR_controller=0;
+		bool simultaneous_LE_BR_host=0;
+
+		Span flag_data;
+
+		Flags(Span s)
+		:flag_data(s)
+		{
+			//Remove the type field
+			flag_data.pop_front();
+			if(!flag_data.empty())
+			{
+				//See 4.0/4.C.18.1
+				LE_limited_discoverable =       flag_data[0] & (1<<0);
+				LE_general_discoverable =       flag_data[0] & (1<<1);
+				BR_EDR_unsupported =            flag_data[0] & (1<<2);
+				simultaneous_LE_BR_controller = flag_data[0] & (1<<3);
+				simultaneous_LE_BR_host =       flag_data[0] & (1<<4);
+			}
+		}
+	};
+
+	vector<UUID> UUIDs;
+	bool uuid_16_bit_complete=0;
+	bool uuid_32_bit_complete=0;
+	bool uuid_128_bit_complete=0;
+	
+	boost::optional<Name>  local_name;
+	boost::optional<Flags> flags;
+
+	vector<Span> manufacturer_specific_data;
+	vector<Span> service_data;
+	vector<Span> unparsed_data_with_types;
+};
 
 
 class HCIScanner
@@ -218,71 +278,127 @@ class HCIScanner
 	private:
 		int hci_fd=-1;
 		hci_filter old_filter;
+	
+		/*
+		   Hello comment-reader!
+
+		   This is a class for dealing with device scanning. The scans are done
+		   using the HCI (Host Controller Interface). Interstingly, the HCI is
+		   well specified even down to the transport layer (RS232 syle, USB,
+		   SDIO and some sort of SLIP based serial). The HCI sometimes unpacks
+		   and aggregates PDUs (the data part of packets) before sending them
+		   for some reason, so you need to look in the HCI part of the spec,
+		   not the PDU part of the spec.
+
+		   The HCI is also semi-autonomous, and can be instructed to do things like
+		   sctive scanning (where it queries and reports additional information, 
+		   typically the device name) and filtering of duplicated advertising 
+		   events. This is great for low power draw because the host CPU doesn't need
+		   to wake up to do menial or unimportant things.
+
+		   Also, the HCI of course gives you everything! The kernel contains no 
+		   permissioned control over filtering which means anything with permissions
+		   to open the HCI can also get all data packets in both directions and
+		   therefore sniff everything. As a result, scanning normally has to be 
+		   activated by root only.
+	   
+		   
+		   The general HCI event format is (Bluetooth 4.0 Vol 2, Part E,  5.4.4)
+		   <packet type> <event code> <length> <crap...>
+		   
+		   Note that the HCI unpacks some of the bitfields in the advertising
+		   PDU and presents them as whole bytes.
+		   
+		   Packet type is not part of the HCI command. In USB the type is
+		   determined by the endpoint address. In all the serial protocols the
+		   packet type is 1 byte at the beginning where 
+		   
+		   Command = 0x01 Event = 0x04
+		   
+		   See, e.g. 4.0/4/A.2
+		   
+		   Linux seems to use these.
+
+		   And the LE events are all <event code> = 0x3E (HCI_LE_META_EVT) as per
+		    4.0/2/E.7.7.65
+		    And the format of <crap...> is:
+		    <subevent code>
+		    <morecrap...>
+
+		   And we're interested in advertising events, where 
+		    <subevent code> = 0x02 (as per 4.0/2/E.7.7.65.2)
+		   
+		    And the format of <morecrap...> in this case is
+		    <num reports>
+		    <report[i]...>
+		   
+		    Where <report> is
+		    <event type>
+		    <address type>
+		    <address>
+		    <length>
+		    <advertisment crap>
+		    <RSS>
+		   
+		    <advertisement crap> is an advertising packet and that's specified
+		    all over the place. 4.0/3/C.8 for example. The advertising packets
+		    are of the format:
+		   
+		    <length0> <type0> <data0> 
+		    <length1> <type1> <data1> ...
+		   
+
+		   Now, the meaning of type, and the valid data are not defined in the main
+		   spec, but in "Supplement to the Bluetooth Core Specification" version 4, 
+		   referred to here as S4. Except that  defines only the name of the types
+		   not their numeric code for some reason. Those are on the web.
+		   https://www.bluetooth.org/en-us/specification/assigned-numbers/generic-access-profile
 
 
-		//The general HCI event format is (Bluetooth 4.0 Vol 2, Part E,  5.4.4
-		// <packet type>
-		// <event code>
-		// <length>
-		// <crap...>
-		//
-		//Note that the HCI unpacks some of the bitfields in the advertising 
-		//PDU and presents them as whole bytes.
-		
-		//Packet type is not part of the HCI command. In USB the type is
-		//determined by the endpoint address. In all the serial protocols
-		//the packet type is 1 byte at the beginning where 
-		//
-		// Command = 0x01
-		// Event = 0x04
-		//
-		// See, e.g. 4.0/4/A.2
-		//
-		//Linux seems to use these.
+		   Some datatypes are not valid in advertising packets and some are also not
+		   valid in LE applications. Apart from a small selection, many of the types 
+		   are rare to the point of nonexistence. I ignore them because I've got nothing
+		   that generates tham and I wouldn't know what to do with them anyway. Feel free
+		   to fix or ping me if you need them :)
+			
+		   The ones generally of interest are:
+		   <<incomplete list of 16 bit UUIDs>>
+		   <<complete list of 16 bit UUIDs>>
+		   <<incomplete list of 128 bit UUIDs>>
+		   <<complete list of 128 bit UUIDs>>
+		   <<shortened local name>>
+		   <<complete local name>>
+		   <<flags>>
+		   <<manufacturer specific data>>
+		   <<service data>>
+			 
+           Personal experience suggest UUIDs and flags are almost always present.
+		   Names are often present. iBeacons use manufacturer specific data whereas
+		   Eddystone beacons use service data. I've used neither. I've not personally
+		   seen or heard of any of the other types, including 32 bit UUIDs.
 
-		//And the LE events are all <event code> = 0x3E (HCI_LE_META_EVT) as per
-		// 4.0/2/E.7.7.65
-		// And the format of <crap...> is:
-		// <subevent code>
-		// <morecrap...>
-
-		//And we're interested in advertising events, where 
-		// <subevent code> = 0x02 (as per 4.0/2/E.7.7.65.2)
-		//
-		// And the format of <morecrap...> in this case is
-		// <num reports>
-		// <report[i]...>
-		//
-		// Where <report> is
-		// <event type>
-		// <address type>
-		// <address>
-		// <length>
-		// <advertisment crap>
-		// <RSS>
-		
-		// <advertisement crap> is an advertising packet and that's specified
-		// all over the place. 4.0/3/C.8 for example. The advertising packets
-		// are of the format:
-		//
-		// <length0> <type0> <data0> 
-		// <length1> <type1> <data1> ...
-		//
+		   There are also some moderately sensible restrictions. A device SHALL NOT
+		   report bot incomplete and complete lists of the same things in the same
+		   packet S4/1.1.1. Furthermore an ommitted UUID specification is equivalent 
+		   to a incomplete list with no elements.
 
 
 
-		//Returns 1 on success, 0  on failure - such as an inability
-		//to handle the packet, not an error.
-		//
-		//Return code can probably be ignored because
-		//it will call lambdas on specific packets anyway.
-		//
-		//TODO: replace some errors with throw.
-		//such as the HCI device spewing crap.
+		   Returns 1 on success, 0  on failure - such as an inability
+		   to handle the packet, not an error.
+		   
+		   Return code can probably be ignored because
+		   it will call lambdas on specific packets anyway.
+		   
+		   TODO: replace some errors with throw.
+		   such as the HCI device spewing crap.
+
+		*/
+
 		public:
 		bool parse_packet(const vector<uint8_t>& p)
 		{
-			Span<uint8_t> packet(p);
+			Span  packet(p);
 			LOG(Debug, to_hex(p));
 
 			if(packet.size() < 1)
@@ -306,7 +422,7 @@ class HCIScanner
 			}
 		}
 
-		bool parse_event_packet(Span<uint8_t> packet)
+		bool parse_event_packet(Span packet)
 		{
 			if(packet.size() < 2)
 			{
@@ -340,7 +456,7 @@ class HCIScanner
 		}
 
 
-		bool parse_le_meta_event(Span<uint8_t> packet)
+		bool parse_le_meta_event(Span packet)
 		{
 			uint8_t subevent_code = packet.pop_front();
 
@@ -356,7 +472,7 @@ class HCIScanner
 			}
 		}
 		
-		bool parse_le_meta_event_advertisement(Span<uint8_t> packet)
+		bool parse_le_meta_event_advertisement(Span packet)
 		{
 			uint8_t num_reports = packet.pop_front();
 			LOGVAR(Info, num_reports);
@@ -404,7 +520,7 @@ class HCIScanner
 				uint8_t length = packet.pop_front();
 				LOGVAR(Info, length);
 				
-				Span<uint8_t> data = packet.pop_front(length);
+				Span data = packet.pop_front(length);
 
 				int8_t rssi = data.pop_front();
 
@@ -414,6 +530,43 @@ class HCIScanner
 					LOG(Info, "RSSI = " << (int) rssi << " dBm");
 				else
 					LOG(Info, "RSSI = " << to_hex((uint8_t)rssi) << " unknown");
+
+					
+				try{
+					AdvertisingResponse rsp;
+
+					while(packet.size() > 0)
+					{
+						//Format is length, type, crap
+						int length = packet.pop_front();
+						Span chunk = packet.pop_front(length);
+						uint8_t type = chunk[0];
+
+						if(type == GAP::flags)
+							rsp.flags = AdvertisingResponse::Flags(chunk);
+						else if(type == GAP::incomplete_list_of_16_bit_UUIDs || type == GAP::complete_list_of_16_bit_UUIDs)
+						{
+							rsp.uuid_16_bit_complete = (type == GAP::complete_list_of_16_bit_UUIDs)
+
+							chunk.pop_front(); //remove the type field
+
+							while(!chunk.empty())
+							{
+								
+
+							}
+
+
+
+						}
+
+
+					}
+				}
+				catch(out_of_range r)
+				{
+					LOG(LogLevels::Error, "Corrupted data sent by device " << address);
+				}
 			}
 
 			return 0;

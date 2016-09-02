@@ -66,6 +66,8 @@ int main(int argc, char **argv)
 	
 
 	std::function<void()> cb = [&gatt, &notify_cb](){
+		pretty_print_tree(gatt);
+
 		for(auto& service: gatt.primary_services)
 			for(auto& characteristic: service.characteristics)
 				if(characteristic.uuid == UUID("53f72b8c-ff27-4177-9eee-30ace844f8f2"))
