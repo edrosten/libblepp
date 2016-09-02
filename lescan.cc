@@ -35,12 +35,12 @@ class Error: public std::runtime_error
 class Span
 {
 	private:
-		const uint8_t* begin;
-		const uint8_t* end;
+		const uint8_t* begin_;
+		const uint8_t* end_;
 
 	public:
 		Span(const std::vector<uint8_t>& d)
-		:begin(d.data()),end(begin + d.size())
+		:begin_(d.data()),end_(begin_ + d.size())
 		{
 		}
 
@@ -52,44 +52,57 @@ class Span
 				throw std::out_of_range("");
 				
 			Span s = *this;
-			s.end = begin + length;
+			s.end_ = begin_ + length;
 
-			begin += length;	
+			begin_ += length;	
 			return s;
 		}	
-
+		const uint8_t* begin() const
+		{
+			return begin_;
+		}
+		const uint8_t* end() const
+		{
+			return end_;
+		}
+		
 		const uint8_t& operator[](const size_t i) const
 		{
 			//FIXME check bounds
 			if(i >= size())
 				throw std::out_of_range("");
-			return begin[i];
+			return begin_[i];
 		}
 
 		bool empty() const
 		{
-			return size()>0;
+			return size()==0;
 		}
 
 		size_t size() const
 		{
-			return end - begin;
+			return end_ - begin_;
 		}
 
 		const uint8_t* data() const
 		{
-			return begin;
+			return begin_;
 		}
 
 		const uint8_t& pop_front()
 		{
-			if(begin == end)
+			if(begin_ == end_)
 				throw std::out_of_range("");
 
-			begin++;
-			return *(begin-1);
+			begin_++;
+			return *(begin_-1);
 		}
 };
+
+string to_hex(const Span& s)
+{
+	return to_hex(s.data(), s.size());
+}
 
 namespace HCI
 {
@@ -191,7 +204,7 @@ class HCIScanner
 
 		//0 = passive scan
 		//1 = active scan
-		int scan_type  = 0x00;
+		int scan_type  = 0x01;
 
 		//Cadged from the hcitool sources. No idea what
 		//these mean
@@ -515,14 +528,18 @@ class HCIScanner
 					address = s.str() + address;
 				}
 
+
 				LOGVAR(Info, address);
 
 				uint8_t length = packet.pop_front();
 				LOGVAR(Info, length);
 				
+
 				Span data = packet.pop_front(length);
 
-				int8_t rssi = data.pop_front();
+				LOG(Debug, "Data = " << to_hex(data));
+
+				int8_t rssi = packet.pop_front();
 
 				if(rssi == 127)
 					LOG(Info, "RSSI = 127: unavailable");
@@ -535,33 +552,81 @@ class HCIScanner
 				try{
 					AdvertisingResponse rsp;
 
-					while(packet.size() > 0)
+					while(data.size() > 0)
 					{
+						LOGVAR(Debug, data.size());
+						LOG(Debug, "Packet = " << to_hex(data));
 						//Format is length, type, crap
-						int length = packet.pop_front();
-						Span chunk = packet.pop_front(length);
+						int length = data.pop_front();
+						
+						LOGVAR(Debug, length);
+
+						Span chunk = data.pop_front(length);
 						uint8_t type = chunk[0];
+						LOGVAR(Debug, type);
 
 						if(type == GAP::flags)
+						{
 							rsp.flags = AdvertisingResponse::Flags(chunk);
+
+							LOG(Info, "Flags = " << to_hex(rsp.flags->flag_data));
+
+							if(rsp.flags->LE_limited_discoverable)
+								LOG(Info, "        LE limited discoverable");
+
+							if(rsp.flags->LE_general_discoverable)
+								LOG(Info, "        LE general discoverable");
+
+							if(rsp.flags->BR_EDR_unsupported)
+								LOG(Info, "        BR/EDR unsupported");
+						}
 						else if(type == GAP::incomplete_list_of_16_bit_UUIDs || type == GAP::complete_list_of_16_bit_UUIDs)
 						{
-							rsp.uuid_16_bit_complete = (type == GAP::complete_list_of_16_bit_UUIDs)
-
+							rsp.uuid_16_bit_complete = (type == GAP::complete_list_of_16_bit_UUIDs);
 							chunk.pop_front(); //remove the type field
 
 							while(!chunk.empty())
 							{
-								
-
+								uint16_t u = chunk.pop_front() + chunk.pop_front()*256;
+								rsp.UUIDs.push_back(UUID(u));
 							}
-
-
-
 						}
+						else if(type == GAP::incomplete_list_of_128_bit_UUIDs || type == GAP::complete_list_of_128_bit_UUIDs)
+						{
+							rsp.uuid_128_bit_complete = (type == GAP::complete_list_of_128_bit_UUIDs);
+							chunk.pop_front(); //remove the type field
 
+							while(!chunk.empty())
+								rsp.UUIDs.push_back(UUID::from(att_get_uuid128(chunk.pop_front(16).data())));
+						}
+						else if(type == GAP::shortened_local_name || type == GAP::complete_local_name)
+						{
+							chunk.pop_front();
+							AdvertisingResponse::Name n;
+							n.complete = type==GAP::complete_local_name;
+							n.name = string(chunk.begin(), chunk.end());
+							rsp.local_name = n;
 
+							LOG(Info, "Name = " << n.name);
+						}
+						else
+						{
+							rsp.unparsed_data_with_types.push_back(chunk);
+
+							LOG(Info, "Unparsed chunk " << to_hex(chunk));
+						}
 					}
+
+					if(rsp.UUIDs.size() > 0)
+					{
+						LOG(Info, "UUIDs (128 bit " << (rsp.uuid_128_bit_complete?"complete":"incomplete")
+							  << ", 16 bit " << (rsp.uuid_16_bit_complete?"complete":"incomplete") << " ):");
+
+						for(const auto& uuid: rsp.UUIDs)
+							LOG(Info, "    " << to_str(uuid));
+					}
+
+
 				}
 				catch(out_of_range r)
 				{
@@ -595,6 +660,7 @@ static int print_advertising_devices(int dd, uint8_t filter_type)
 int main()
 {
 	HCIScanner scanner;
+	log_level = LogLevels::Debug;
 	log_level = LogLevels::Info;
 
 	while (1) {
