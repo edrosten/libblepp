@@ -23,11 +23,12 @@
 
 #include <iostream>
 #include <iomanip>
-#include <libattgatt/blestatemachine.h>
+#include <blepp/blestatemachine.h>
 #include <unistd.h>
 #include <chrono>
 using namespace std;
 using namespace chrono;
+using namespace BLEPP;
 
 ////////////////////////////////////////////////////////////////////////////////
 //
