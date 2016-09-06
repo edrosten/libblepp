@@ -26,9 +26,10 @@ using namespace blepp;
 class Error: public std::runtime_error 
 {
 	public:
-	Error(const string& why, int errno_val)
-	:std::runtime_error(why  + ": " +   strerror(errno_val))
+	Error(const string& why)
+	:std::runtime_error(why)
 	{
+		LOG(LogLevels::Error, why);
 	}
 };
 
@@ -189,6 +190,17 @@ class HCIScanner
 
 	class IOError: public Error
 	{
+		public:
+		IOError(const string& why, int errno_val)
+		:Error(why + ": " +   strerror(errno_val))
+		{
+		}
+	};
+	
+	///HCI device spat out invalid data.
+	///This is not good.
+	class HCIError: public Error
+	{
 		using Error::Error;
 	};
 
@@ -263,7 +275,10 @@ class HCIScanner
 	
 	~HCIScanner()
 	{
-		setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &old_filter, sizeof(old_filter));
+		int err = setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &old_filter, sizeof(old_filter));
+
+		if(err < 0)
+			LOG(LogLevels::Error, "Error resetting HCI socket:" << strerror(errno));
 	}
 
 
@@ -278,7 +293,7 @@ class HCIScanner
 			if(errno == EAGAIN)
 				continue;
 			else if(errno == EINTR)
-				throw Interrupted("reading HCI packet", EINTR);
+				throw Interrupted("interrupted reading HCI packet");
 			else
 				throw IOError("reading HCI packet", errno);
 		}
@@ -430,28 +445,23 @@ class HCIScanner
 			}
 			else
 			{
-				return 0;
-				LOG(Debug, "Unknown packet received");
+				LOG(LogLevels::Error, "Unknown HCI packet received");
+				throw HCIError("Unknown HCI packet received");
 			}
 		}
 
+		private:
 		bool parse_event_packet(Span packet)
 		{
 			if(packet.size() < 2)
-			{
-				LOG(LogLevels::Error, "Truncated event packet");
-				return 0;
-			}
+				throw HCIError("Truncated event packet");
 			
 			uint8_t event_code = packet.pop_front();
 			uint8_t length = packet.pop_front();
 
 			
 			if(packet.size() != length)
-			{
-				LOG(LogLevels::Error, "Bad packet length");
-				return 0;
-			}
+				throw HCIError("Bad packet length");
 			
 			if(event_code == EVT_LE_META_EVENT)
 			{
@@ -462,9 +472,9 @@ class HCIScanner
 			}
 			else
 			{
-				LOG(Info, "event_code = 0x" << hex << (int)event_code << ": Meta event" << dec);
+				LOG(Info, "event_code = 0x" << hex << (int)event_code << dec);
 				LOGVAR(Info, length);
-				return 0;
+				throw HCIError("Unexpected HCI event packet");
 			}
 		}
 
@@ -607,7 +617,7 @@ class HCIScanner
 							n.name = string(chunk.begin(), chunk.end());
 							rsp.local_name = n;
 
-							LOG(Info, "Name = " << n.name);
+							LOG(Info, "Name (" << (n.complete?"complete":"incomplete") << "): " << n.name);
 						}
 						else
 						{
