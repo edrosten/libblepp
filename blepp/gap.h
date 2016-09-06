@@ -1,7 +1,7 @@
 #ifndef BLEPLUSPLUS_INC_GAP_H
 #define BLEPLUSPLUS_INC_GAP_H
 
-namespace blepp
+namespace BLEPP
 {
 	namespace GAP
 	{

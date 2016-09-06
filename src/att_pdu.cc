@@ -1,6 +1,6 @@
 /*
  *
- *  libblepp - Implementation of the Generic ATTribute Protocol
+ *  blepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -21,14 +21,13 @@
  */
 
 #include <iostream>
-#include <libblepp/att_pdu.h>
-#include <libblepp/pretty_printers.h>
+#include <blepp/att_pdu.h>
+#include <blepp/pretty_printers.h>
 
 using namespace std;
 
 
-
-void pretty_print(const PDUResponse& pdu)
+void BLEPP::pretty_print(const PDUResponse& pdu)
 {
 	if(log_level >= Debug)
 	{

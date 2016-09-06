@@ -6,7 +6,7 @@ CFLAGS+= -Wall -Wextra -g -ggdb -I . -std=c99
 
 
 
-OBJS=src/att.o src/uuid.o src/logging.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o
+OBJS=src/att.o src/uuid.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o src/logging.o
 
 
 lescan: $(OBJS) lescan.o

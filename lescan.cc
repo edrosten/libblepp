@@ -14,13 +14,13 @@
 
 #include <stdexcept>
 
-#include <libattgatt/logging.h>
-#include <libattgatt/pretty_printers.h>
-#include <libattgatt/blestatemachine.h> //for UUID. FIXME mofo
-#include <libattgatt/gap.h>
+#include <blepp/logging.h>
+#include <blepp/pretty_printers.h>
+#include <blepp/blestatemachine.h> //for UUID. FIXME mofo
+#include <blepp/gap.h>
 
 using namespace std;
-using namespace blepp;
+using namespace BLEPP;
 
 
 class Error: public std::runtime_error 
