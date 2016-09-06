@@ -1,4 +1,4 @@
-#include <libattgatt/float.h>
+#include <libblepp/float.h>
 #include <cmath>
 
 using namespace std;

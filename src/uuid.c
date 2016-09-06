@@ -30,7 +30,7 @@
 #include <stdlib.h>
 #include <errno.h>
 
-#include <libattgatt/uuid.h>
+#include <libblepp/uuid.h>
 
 //Always store full UUIDs as little endian, since they come over
 //the wire that way.

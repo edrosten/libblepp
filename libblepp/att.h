@@ -1,6 +1,6 @@
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -44,7 +44,7 @@
  *
  */
 
-#include <libattgatt/uuid.h>
+#include <libblepp/uuid.h>
 
 /* New style defs */
 #define LE_ATT_CID 4        //Spec 4.0 G.5.2.2

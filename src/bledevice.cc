@@ -1,6 +1,6 @@
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -19,9 +19,9 @@
  *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
-#include "libattgatt/bledevice.h"
-#include "libattgatt/logging.h"
-#include "libattgatt/att_pdu.h"
+#include "libblepp/bledevice.h"
+#include "libblepp/logging.h"
+#include "libblepp/att_pdu.h"
 
 
 #include <bluetooth/bluetooth.h>

@@ -1,6 +1,9 @@
+#ifndef __INC_LIBATTGATT_PRETTY_PRINTERS_H
+#define __INC_LIBATTGATT_PRETTY_PRINTERS_H
+
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -20,10 +23,22 @@
  *
  */
 
-#ifndef __INC_LIBATTGATT_FLOAT_H
-#define __INC_LIBATTGATT_FLOAT_H
+#include <libblepp/uuid.h>
 
 #include <cstdint>
-float bluetooth_float_to_IEEE754(const std::uint8_t* bytes);
+#include <utility>
+#include <vector>
+#include <string>
 
+std::string to_hex(const std::uint16_t& u);
+std::string to_hex(const std::uint8_t& u);
+std::string to_str(const std::uint8_t& u);
+std::string to_str(const bt_uuid_t& uuid);
+std::string to_hex(const std::uint8_t* d, int l);
+std::string to_hex(std::pair<const std::uint8_t*, int> d);
+std::string to_hex(const std::vector<std::uint8_t>& v);
+std::string to_str(const std::uint8_t* d, int l);
+std::string to_str(std::pair<const std::uint8_t*, int> d);
+std::string to_str(std::pair<const std::uint8_t*, const std::uint8_t*> d);
+std::string to_str(const std::vector<std::uint8_t>& v);
 #endif

@@ -1,6 +1,6 @@
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -21,8 +21,8 @@
  */
 
 #include <iostream>
-#include <libattgatt/att_pdu.h>
-#include <libattgatt/pretty_printers.h>
+#include <libblepp/att_pdu.h>
+#include <libblepp/pretty_printers.h>
 
 using namespace std;
 

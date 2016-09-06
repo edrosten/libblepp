@@ -1,6 +1,6 @@
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -42,10 +42,10 @@
 #include <utility>
 
 extern "C" {
-	#include <libattgatt/att.h>
+	#include <libblepp/att.h>
 }
 
-#include <libattgatt/logging.h>
+#include <libblepp/logging.h>
 
 /* Basic PDU response as in 3.F.3.3.1 */
 class PDUResponse

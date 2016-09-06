@@ -57,8 +57,8 @@
 
 #include <bluetooth/bluetooth.h>
 
-#include <libattgatt/uuid.h>
-#include <libattgatt/att.h>
+#include <libblepp/uuid.h>
+#include <libblepp/att.h>
 
 #define MIN(A, B) (((A)<(B))?(A):(B))
 const char *att_ecode2str(uint8_t status)

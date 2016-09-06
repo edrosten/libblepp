@@ -1,6 +1,6 @@
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -20,11 +20,11 @@
  *
  */
 
-#include "libattgatt/bledevice.h"
-#include "libattgatt/logging.h"
-#include "libattgatt/att_pdu.h"
-#include "libattgatt/pretty_printers.h"
-#include "libattgatt/blestatemachine.h"
+#include "libblepp/bledevice.h"
+#include "libblepp/logging.h"
+#include "libblepp/att_pdu.h"
+#include "libblepp/pretty_printers.h"
+#include "libblepp/blestatemachine.h"
 
 #include <algorithm>
 

@@ -1,6 +1,6 @@
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -26,7 +26,7 @@
 #include <cstdint>
 #include <vector>
 #include <string>
-#include <libattgatt/att_pdu.h>
+#include <libblepp/att_pdu.h>
 
 //Almost zero resource to represent the ATT protocol on a BLE
 //device. This class does none of its own memory management, and will not generally allocate

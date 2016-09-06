@@ -2,7 +2,7 @@
 #define __INC_LIBATTGATT_BLESTATEMACHINE_H
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -26,9 +26,9 @@
 #include <stdexcept>
 #include <functional>
 
-#include <libattgatt/logging.h>
-#include <libattgatt/bledevice.h>
-#include <libattgatt/att_pdu.h>
+#include <libblepp/logging.h>
+#include <libblepp/bledevice.h>
+#include <libblepp/att_pdu.h>
 
 
 #include <bluetooth/l2cap.h>

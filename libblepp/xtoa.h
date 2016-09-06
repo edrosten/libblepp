@@ -19,6 +19,16 @@
  *  Foundation, Inc., 51 Franklin St, Fifth Floor, Boston, MA  02110-1301  USA
  *
  */
-#include "libblepp/logging.h"
-LogLevels log_level;
 
+
+#ifndef INC_XTOA_H
+#define INC_XTOA_H
+#include <sstream>
+template<class X>
+std::string xtoa(const X& x)
+{
+	std::ostringstream o;
+	o << x;
+	return o.str();
+}
+#endif

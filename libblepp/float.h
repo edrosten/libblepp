@@ -1,6 +1,6 @@
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -20,15 +20,10 @@
  *
  */
 
+#ifndef __INC_LIBATTGATT_FLOAT_H
+#define __INC_LIBATTGATT_FLOAT_H
 
-#ifndef INC_XTOA_H
-#define INC_XTOA_H
-#include <sstream>
-template<class X>
-std::string xtoa(const X& x)
-{
-	std::ostringstream o;
-	o << x;
-	return o.str();
-}
+#include <cstdint>
+float bluetooth_float_to_IEEE754(const std::uint8_t* bytes);
+
 #endif

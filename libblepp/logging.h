@@ -1,6 +1,6 @@
 /*
  *
- *  libattgatt - Implementation of the Generic ATTribute Protocol
+ *  libblepp - Implementation of the Generic ATTribute Protocol
  *
  *  Copyright (C) 2013, 2014 Edward Rosten
  *
@@ -24,7 +24,7 @@
 #define __INC_LIBATTGATT_LOGGING_H
 #include <iostream>
 #include <sstream>
-#include <libattgatt/xtoa.h>
+#include <libblepp/xtoa.h>
 
 enum LogLevels
 {
