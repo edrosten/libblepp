@@ -100,7 +100,7 @@ namespace BLEPP
 	:flag_data(s)
 	{
 		//Remove the type field
-		s.erase(s.begin());
+		flag_data.erase(s.begin());
 		if(!flag_data.empty())
 		{
 			//See 4.0/4.C.18.1
