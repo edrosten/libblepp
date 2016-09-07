@@ -22,7 +22,7 @@ LDFLAGS=@LDFLAGS@
 hdr = $(DESTDIR)$(includedir)/
 
 
-LIBOBJS=src/att.o src/uuid.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o src/logging.o
+LIBOBJS=src/att.o src/uuid.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o src/logging.o src/lescan.o
 
 PROGS=lescan blelogger bluetooth
 
