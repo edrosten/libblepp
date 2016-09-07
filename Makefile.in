@@ -6,8 +6,9 @@ includedir = @includedir@
 datarootdir = @datarootdir@
 pkgconfig = @PKGCONFIG_LIBDIR@
 srcdir = @srcdir@
-VPATH = @srcdir@
 LOADLIBES = @LIBS@
+
+vpath %.cc $(srcdir)
 
 ifneq "$(DESTDIR)" ""
 DESTDIR+=/
@@ -16,7 +17,7 @@ endif
 CXX=@CXX@
 LD=@CXX@
 CXXFLAGS=@CXXFLAGS@ -I$(srcdir)
-LDFLAGS=@LDFLAGS@ @LIBS@
+LDFLAGS=@LDFLAGS@
 
 hdr = $(DESTDIR)$(includedir)/
 
@@ -40,13 +41,14 @@ all: lib progs test doc
 doc:
 
 
+
 soname=libble++.so
 soname1=libble++.so.0
 soname2=libble++.so.0.5
 set_soname=-Wl,-soname,libble++.so.0
 
 $(soname2): $(LIBOBJS)
-	$(LD) -shared -o $(soname2) $(LIBOBJS) $(LDFLAGS) $(LOADLIBES) $(set_soname)
+	$(LD) -shared -o $(soname2) $(LIBOBJS) $(LDFLAGS) $(LOADLIBES)
 
 $(soname1): $(soname2)
 	rm -f $(soname1)
