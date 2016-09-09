@@ -518,6 +518,12 @@ namespace BLEPP
 
 						if(rsp.flags->BR_EDR_unsupported)
 							LOG(Info, "        BR/EDR unsupported");
+
+						if(rsp.flags->simultaneous_LE_BR_host)
+							LOG(Info, "        simultaneous LE BR host");
+
+						if(rsp.flags->simultaneous_LE_BR_controller)
+							LOG(Info, "        simultaneous LE BR controller");
 					}
 					else if(type == GAP::incomplete_list_of_16_bit_UUIDs || type == GAP::complete_list_of_16_bit_UUIDs)
 					{
@@ -547,6 +553,12 @@ namespace BLEPP
 						rsp.local_name = n;
 
 						LOG(Info, "Name (" << (n.complete?"complete":"incomplete") << "): " << n.name);
+					}
+					else if(type == GAP::manufacturer_data)
+					{
+						chunk.pop_front();
+						rsp.manufacturer_specific_data.push_back({chunk.begin(), chunk.end()});
+						LOG(Info, "Manufacturer data: " << to_hex(chunk));
 					}
 					else
 					{
