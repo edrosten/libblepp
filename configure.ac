@@ -56,6 +56,16 @@ define([TEST_AND_SET_CXXFLAG],[
 ])
 
 
+dnl Add flags, but only if the flags weren't specified.
+if test "$CXXFLAGS" == "-g -O2"
+then
+	
+	TEST_AND_SET_CXXFLAG(-Wall)
+	TEST_AND_SET_CXXFLAG(-Wextra)
+	TEST_AND_SET_CXXFLAG(-W)
+	TEST_AND_SET_CXXFLAG(-O3)
+	TEST_AND_SET_CXXFLAG(-ggdb)
+fi
 
 AX_CXX_COMPILE_STDCXX_14
 
@@ -90,10 +100,7 @@ then
 	AC_ERROR([bluez bluetooth missing])
 fi
 
-TEST_AND_SET_CXXFLAG(-Wall)
-TEST_AND_SET_CXXFLAG(-Wextra)
-TEST_AND_SET_CXXFLAG(-W)
-TEST_AND_SET_CXXFLAG(-O3)
+
 TEST_AND_SET_CXXFLAG(-fPIC)
 dnl TEST_AND_SET_CXXFLAG(-Werror)
 
