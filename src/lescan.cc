@@ -187,8 +187,6 @@ namespace BLEPP
 		hci_filter_set_event(EVT_LE_META_EVENT, &nf);
 		if (setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &nf, sizeof(nf)) < 0)
 			throw IOError("Setting HCI filter socket options", errno);
-
-
 	}
 
 	int HCIScanner::get_fd() const
@@ -199,7 +197,12 @@ namespace BLEPP
 		
 	HCIScanner::~HCIScanner()
 	{
-		int err = setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &old_filter, sizeof(old_filter));
+		LOG(LogLevels::Info, "Cleaning up HCI scanner");
+		int err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
+
+		if(err < 0)
+			LOG(LogLevels::Error, "Error disabling scan:" << strerror(errno));
+		err = setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &old_filter, sizeof(old_filter));
 
 		if(err < 0)
 			LOG(LogLevels::Error, "Error resetting HCI socket:" << strerror(errno));
@@ -490,6 +493,8 @@ namespace BLEPP
 				
 			try{
 				AdvertisingResponse rsp;
+
+				rsp.address = address;
 
 				while(data.size() > 0)
 				{

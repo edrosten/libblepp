@@ -6,6 +6,7 @@ includedir = @includedir@
 datarootdir = @datarootdir@
 pkgconfig = @PKGCONFIG_LIBDIR@
 srcdir = @srcdir@
+libdir=@libdir@
 LOADLIBES = @LIBS@
 
 vpath %.cc $(srcdir)
@@ -20,15 +21,16 @@ CXXFLAGS=@CXXFLAGS@ -I$(srcdir)
 LDFLAGS=@LDFLAGS@
 
 hdr = $(DESTDIR)$(includedir)/
+lib = $(DESTDIR)$(libdir)/
 
 
 LIBOBJS=src/att.o src/uuid.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o src/logging.o src/lescan.o
 
 PROGS=lescan blelogger bluetooth
 
-.PHONY: all clean testclean install lib progs test doc
+.PHONY: all clean testclean install lib progs test doc install-so install-a install-hdr install-pkgconfig
 
-lib: $(soname)
+lib: $(soname) $(archive)
 progs:$(PROGS)
 
 
@@ -43,7 +45,7 @@ all: lib progs test doc
 doc:
 
 
-
+archive=libble++.a
 soname=libble++.so
 soname1=libble++.so.0
 soname2=libble++.so.0.5
@@ -56,21 +58,35 @@ $(soname1): $(soname2)
 	rm -f $(soname1)
 	ln -s $(soname2) $(soname1)
 
-
 $(soname): $(soname1)
 	rm -f $(soname)
 	ln -s $(soname1) $(soname)
+
+$(archive): $(LIBOBJS)
+	ar crvs $(archive) $(LIBOBJS)
+	ranlib $(archive)
 
 $(PROGS):$(soname)
 
 lescan: lescan.o 
 	$(LD) -o $@ $<  -L. -lble++
 
-install:
-	mkdir -p $(hdr)
-	cp -t blepp $(hdr)
+install: install-so install-a install-hdr install-pkgconfig
+
+
+install-a: $(archive)
+	cp $(archive) $(lib)
+
+install-so: $(soname) $(soname1) $(soname2)
+	cp $(soname) $(soname1) $(soname2) $(lib)
+
+install-hdr:
+	cp -r blepp $(hdr)
+
+install-pkgconfig:
 	[ "$(pkgconfig)" = "" ] || mkdir -p $(DESTDIR)$(pkgconfig)
 	[ "$(pkgconfig)" = "" ] || cp libblepp.pc $(DESTDIR)$(pkgconfig)/
+	
 
 
 docs:

@@ -40,6 +40,7 @@ namespace BLEPP
 	//It seems pretty wretched.
 	struct AdvertisingResponse
 	{
+		std::string address;
 		struct Name
 		{
 			std::string name;
