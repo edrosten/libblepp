@@ -31,33 +31,40 @@ void catch_function(int)
 int main()
 {
 	HCIScanner scanner;
-	fd_set fds;
 	
+	//Catch the interrupt signal. If the scanner is not 
+	//cleaned up properly, then it doesn't reset the HCI state.
 	signal(SIGINT, catch_function);
 
+	//Something to print to demonstrate the timeout.
 	string throbber="/|\\-";
 	
-	//hide cursor
+	//hide cursor, to make the throbber look nicer.
 	cout << "[?25l" << flush;
 
 	int i=0;
 	while (1) {
+		
 
+		//Check to see if there's anything to read from the HCI
+		//and wait if there's not.
 		struct timeval timeout;     
 		timeout.tv_sec = 0;     
 		timeout.tv_usec = 300000;
 
+		fd_set fds;
 		FD_ZERO(&fds);
 		FD_SET(scanner.get_fd(), &fds);
 		int err = select(scanner.get_fd()+1, &fds, NULL, NULL,  &timeout);
-
+		
+		//Interrupted, so quit and clean up properly.
 		if(err < 0 && errno == EINTR)	
 			break;
 		
 		if(FD_ISSET(scanner.get_fd(), &fds))
 		{
+			//Only read id there's something to read
 			vector<AdvertisingResponse> ads = scanner.get_advertisements();
-
 
 			for(const auto& ad: ads)
 			{
