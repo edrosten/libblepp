@@ -3644,6 +3644,16 @@ then
 	as_fn_error $? "bluez bluetooth missing" "$LINENO" 5
 fi
 
+ac_fn_cxx_check_header_mongrel "$LINENO" "boost/optional.hpp" "ac_cv_header_boost_optional_hpp" "$ac_includes_default"
+if test "x$ac_cv_header_boost_optional_hpp" = xyes; then :
+
+else
+  as_fn_error $? "boost::optional missint" "$LINENO" 5
+fi
+
+
+
+
 
 
 	if test "" == ""
