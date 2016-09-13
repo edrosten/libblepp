@@ -79,6 +79,34 @@ namespace BLEPP
 	/// anyone with an open HCI device can sniff all data.
 	class HCIScanner
 	{
+		class FD
+		{
+			private:
+				int fd=-1;
+
+			public:
+				operator int () const
+				{
+					return fd;
+				}
+				FD(int i)
+				:fd(i)
+				{
+				}
+				
+				FD()=default;
+				void set(int i)
+				{
+					fd = i;
+				}
+
+				~FD()
+				{
+					if(fd != -1)
+						close(fd);
+				}
+		};
+
 		public:
 		
 		///Generic error exception class
@@ -112,6 +140,10 @@ namespace BLEPP
 		};
 
 		HCIScanner();
+		HCIScanner(bool start);
+
+		void start();
+		void stop();
 		
 		///get the file descriptor.
 		///Use with select(), poll() or whatever.
@@ -128,7 +160,8 @@ namespace BLEPP
 		static std::vector<AdvertisingResponse> parse_packet(const std::vector<uint8_t>& p);
 
 		private:
-			int hci_fd=-1;
+			FD hci_fd;
+			bool running=0;
 			hci_filter old_filter;
 			
 			///Read the HCI data, but don't parse it.

@@ -48,7 +48,6 @@ namespace BLEPP
 			
 			const uint8_t& operator[](const size_t i) const
 			{
-				//FIXME check bounds
 				if(i >= size())
 					throw std::out_of_range("");
 				return begin_[i];
@@ -136,7 +135,7 @@ namespace BLEPP
 		
 		//Open the device
 		//FIXME check errors
-		hci_fd = hci_open_dev(dev_id);
+		hci_fd.set(hci_open_dev(dev_id));
 
 		//0 = passive scan
 		//1 = active scan
@@ -147,9 +146,6 @@ namespace BLEPP
 		uint16_t interval = htobs(0x0010);
 		uint16_t window = htobs(0x0010);
 
-		//Removal of duplicates done on the adapter itself
-		uint8_t filter_dup = 0x01;
-		
 		//Address for the adapter (I think). Use a public address.
 		//other option is random. Works either way it seems.
 		uint8_t own_type = LE_PUBLIC_ADDRESS;
@@ -163,18 +159,22 @@ namespace BLEPP
 		//where it gets reduced by 10ms each time. It's a bit odd.
 		int err = hci_le_set_scan_parameters(hci_fd, scan_type, interval, window,
 							own_type, filter_policy, 10000);
-		
 		if(err < 0)
 			throw IOError("Setting scan parameters", errno);
+		
+		start();
+	}
 
-		//device disable/enable duplictes ????
-		err = hci_le_set_scan_enable(hci_fd, 0x01, filter_dup, 10000);
-		if(err < 0)
-			throw IOError("Enabling scan", errno);
+	void HCIScanner::start()
+	{
+		if(running)
+			return;
 
+		//Removal of duplicates done on the adapter itself
+		uint8_t filter_dup = 0x01;
+		
 		
 		//Set up the filters. 
-
 		socklen_t olen = sizeof(old_filter);
 		if (getsockopt(hci_fd, SOL_HCI, HCI_FILTER, &old_filter, &olen) < 0) 
 			throw IOError("Getting HCI filter socket options", errno);
@@ -187,6 +187,33 @@ namespace BLEPP
 		hci_filter_set_event(EVT_LE_META_EVENT, &nf);
 		if (setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &nf, sizeof(nf)) < 0)
 			throw IOError("Setting HCI filter socket options", errno);
+
+
+		//device disable/enable duplictes ????
+		int err = hci_le_set_scan_enable(hci_fd, 0x01, filter_dup, 10000);
+		if(err < 0)
+			throw IOError("Enabling scan", errno);
+
+		running=true;
+	}
+
+	void HCIScanner::stop()
+	{
+		if(!running)
+			return;
+
+		LOG(LogLevels::Info, "Cleaning up HCI scanner");
+		int err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
+
+		if(err < 0)
+			throw IOError("Error disabling scan:", errno);
+
+		err = setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &old_filter, sizeof(old_filter));
+
+		if(err < 0)
+			throw IOError("Error resetting HCI socket:", errno);
+
+		running = false;
 	}
 
 	int HCIScanner::get_fd() const
@@ -197,15 +224,13 @@ namespace BLEPP
 		
 	HCIScanner::~HCIScanner()
 	{
-		LOG(LogLevels::Info, "Cleaning up HCI scanner");
-		int err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
-
-		if(err < 0)
-			LOG(LogLevels::Error, "Error disabling scan:" << strerror(errno));
-		err = setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &old_filter, sizeof(old_filter));
-
-		if(err < 0)
-			LOG(LogLevels::Error, "Error resetting HCI socket:" << strerror(errno));
+		try
+		{
+			stop();
+		}
+		catch(IOError)
+		{
+		}
 	}
 
 
