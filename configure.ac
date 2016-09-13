@@ -100,7 +100,7 @@ then
 	AC_ERROR([bluez bluetooth missing])
 fi
 
-AC_CHECK_HEADER(boost/optional.hpp,  [ ], [AC_ERROR([boost::optional missint])])
+AC_CHECK_HEADER(boost/optional.hpp,  [ ], [AC_ERROR([boost::optional missing])])
 
 
 

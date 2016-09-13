@@ -3648,7 +3648,7 @@ ac_fn_cxx_check_header_mongrel "$LINENO" "boost/optional.hpp" "ac_cv_header_boos
 if test "x$ac_cv_header_boost_optional_hpp" = xyes; then :
 
 else
-  as_fn_error $? "boost::optional missint" "$LINENO" 5
+  as_fn_error $? "boost::optional missing" "$LINENO" 5
 fi
 
 
