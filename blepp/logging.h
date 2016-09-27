@@ -66,9 +66,9 @@ namespace BLEPP{
 		if(X <= BLEPP::log_level)\
 		{\
 			if(X >= LogLevels::Debug)\
-				std::clog << log_types[X] << ": " << __FUNCTION__ << " " << Y << std::endl;\
+				std::clog << BLEPP::log_types[X] << ": " << __FUNCTION__ << " " << Y << std::endl;\
 			else\
-				std::clog << log_types[X] << ": " << Y << std::endl;\
+				std::clog << BLEPP::log_types[X] << ": " << Y << std::endl;\
 		}\
 	}while(0)
 

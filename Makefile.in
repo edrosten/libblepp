@@ -26,7 +26,7 @@ lib = $(DESTDIR)$(libdir)/
 
 LIBOBJS=src/att.o src/uuid.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o src/logging.o src/lescan.o
 
-PROGS=lescan blelogger bluetooth
+PROGS=lescan blelogger bluetooth lescan_simple
 
 .PHONY: all clean testclean install lib progs test doc install-so install-a install-hdr install-pkgconfig
 
