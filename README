@@ -19,3 +19,14 @@ Design:
 Clean, modern C++ with callbacks. Feed it lambdas (or whatever you like)
 to perform an event happens. Access provided to the raw socket FD, so 
 you can select(), poll() or use blocking IO.
+
+
+
+The example programs are:
+
+* lescan_simple: Simplest possible program for scanning for devices. Only 2 non boilerplate lines.
+
+* lescan: A "proper" scanning program that cleans up properly. It's got the same 2 lines of BLE related code and a bit of pretty standard unix for dealing with non blocking I/O and signals.
+
+* temperature: A program for logging temperature values from a device providing a standard temperature characteristic. Very short to indicate the usave, but not much error checking.
+
