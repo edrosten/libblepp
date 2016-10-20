@@ -65,7 +65,7 @@ namespace BLEPP{
 	#define LOG(X, Y) do{\
 		if(X <= BLEPP::log_level)\
 		{\
-			if(X >= LogLevels::Debug)\
+			if(X >= BLEPP::LogLevels::Debug)\
 				std::clog << BLEPP::log_types[X] << ": " << __FUNCTION__ << " " << Y << std::endl;\
 			else\
 				std::clog << BLEPP::log_types[X] << ": " << Y << std::endl;\
