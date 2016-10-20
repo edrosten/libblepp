@@ -127,7 +127,7 @@ namespace BLEPP
 	{
 	}
 		
-	HCIScanner::HCIScanner()
+	HCIScanner::HCIScanner(bool start_scan)
 	{
 		//Get a route to any(?) BTLE adapter (?)
 		//FIXME check errors
@@ -162,7 +162,14 @@ namespace BLEPP
 		if(err < 0)
 			throw IOError("Setting scan parameters", errno);
 		
-		start();
+		if(start_scan)
+			start();
+	}
+
+	HCIScanner::HCIScanner()
+	:HCIScanner(true)
+	{
+
 	}
 
 	void HCIScanner::start()
