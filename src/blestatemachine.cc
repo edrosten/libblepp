@@ -790,6 +790,8 @@ namespace BLEPP
 	{
 		ENTER();
 
+		primary_services.clear();
+
 		cb_services_read = [this]()
 		{
 			this->find_all_characteristics();

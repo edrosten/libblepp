@@ -30,6 +30,7 @@ void catch_function(int)
 
 int main()
 {
+	log_level = LogLevels::Debug;
 	HCIScanner scanner;
 	
 	//Catch the interrupt signal. If the scanner is not 

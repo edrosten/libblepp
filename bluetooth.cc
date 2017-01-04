@@ -24,13 +24,14 @@
 #include <iostream>
 #include <sstream>
 #include <iomanip>
-#include <libattgatt/blestatemachine.h>
-#include <libattgatt/float.h>
+#include <blepp/blestatemachine.h>
+#include <blepp/float.h>
 #include <deque>
 #include <sys/time.h>
 #include <unistd.h>
 #include "cxxgplot.h"  //lolzworthy plotting program
 using namespace std;
+using namespace BLEPP;
 
 void bin(uint8_t i)
 {
@@ -119,9 +120,17 @@ int main(int argc, char **argv)
 		//This particular device sends 16 bit integers.
 		//Extract them and both print them in binary and send them to the plotting program
 		const uint8_t* d = n.value().first;
-		int val = ((0+d[1] *256 + d[0])>>0) ;
-
-		int16_t bv = d[6] | (d[7] << 8);
+		for(int i=0; i < 7; i++)
+		{
+			int val = ((0+d[1 + 2*i] *256 + d[0 + 2*i])>>0) ;
+			//Format the points and send the results to the plotting program.
+			points.push_back(val);
+			if(points.size() > 300)
+				points.pop_front();
+		}
+		
+		uint32_t seq = d[14] | (d[15]<<8) | (d[16]<<16) | (d[17]<<8);
+		int16_t bv = d[18] | (d[19] << 8);
 
 		if(bv != -32768)
 			voltage = bv / 1000.0;
@@ -133,15 +142,11 @@ int main(int argc, char **argv)
 
 		//cout << endl;
 
-		//Format the points and send the results to the plotting program.
-		points.push_back(val);
-		if(points.size() > 100)
-			points.pop_front();
 		
-		plot.newline("line lw 10 lt 0 title \"\"");
+		plot.newline("line lw 3 lt 1 title \"\"");
 		plot.addpts(points);
 		ostringstream os;
-		os << "set title \"Voltage: " << voltage << "\"";
+		os << "set title \"Voltage: " << voltage << " Seq: " << seq << "\"";
 		plot.add_extra(os.str());
 
 		plot.draw();
@@ -166,7 +171,7 @@ int main(int argc, char **argv)
 
 		for(auto& service: gatt.primary_services)
 			for(auto& characteristic: service.characteristics)
-				if(service.uuid == UUID("7309203e-349d-4c11-ac6b-baedd1819764") && characteristic.uuid == UUID("53f72b8c-ff27-4177-9eee-30ace844f8f2"))
+				if(service.uuid == UUID("7309203e-349d-4c11-ac6b-baedd1819764") && characteristic.uuid == UUID("e5f49879-6ee1-479e-bfec-3d35e13d3b88"))
 				{
 					cout << "woooo\n";
 					characteristic.cb_notify_or_indicate = notify_cb;
