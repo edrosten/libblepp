@@ -68,15 +68,19 @@ namespace BLEPP{
 	#define LOG(X, Y) do{\
 		if(X <= BLEPP::log_level)\
 		{\
+			std::ostringstream os;\
+			std::ostream& out(X>=BLEPP::LogLevels::Trace ? std::clog:os);\
 			using seconds_d = std::chrono::duration<double, std::ratio<1>>;\
 			double  now = std::chrono::duration_cast<seconds_d>(std::chrono::system_clock::now().time_since_epoch()).count();\
-			std::clog << BLEPP::log_types[X] << "(" << std::setprecision(6) << now <<  "): ";\
+			out << std::fixed << std::setprecision(6) << now <<  " " << BLEPP::log_types[X]<< ": "; \
 			if(X >= BLEPP::LogLevels::Trace)\
-				std::clog << BLEPP::log_types[X] << ": " << __FUNCTION__ << ":" << __LINE__ <<": " << Y << std::endl;\
+				out << __FUNCTION__ << ":" << __LINE__ <<": " << Y << std::endl;\
 			else if(X >= BLEPP::LogLevels::Debug)\
-				std::clog << BLEPP::log_types[X] << ": " << __FUNCTION__ << " " << Y << std::endl;\
+				out << __FUNCTION__ << " " << Y << std::endl;\
 			else\
-				std::clog << BLEPP::log_types[X] << ": " << Y << std::endl;\
+				out << Y << std::endl;\
+			if(&out == &os)\
+				std::clog << os.str();\
 		}\
 	}while(0)
 
