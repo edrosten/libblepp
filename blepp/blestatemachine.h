@@ -238,15 +238,25 @@ namespace BLEPP
 	{
 		public:
 
-			enum Disconnect{
-				ConnectionFailed,
-				UnexpectedError,
-				UnexpectedResponse,
-				WriteError,
-				ReadError,
-				ConnectionClosed
-			};
+			struct Disconnect
+			{
+				enum Reason{
+					ConnectionFailed,
+					UnexpectedError,
+					UnexpectedResponse,
+					WriteError,
+					ReadError,
+					ConnectionClosed
+				} reason;
+				
+				static constexpr int NoErrorCode=1; // Any positive value
+				int error_code;
 
+				Disconnect(Reason r, int e)
+				:reason(r), error_code(e)
+				{
+				}
+			};
 			static const char* get_disconnect_string(Disconnect); 
 
 		private:

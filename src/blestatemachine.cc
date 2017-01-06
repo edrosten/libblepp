@@ -59,14 +59,14 @@ namespace BLEPP
 
 	const char* BLEGATTStateMachine::get_disconnect_string(Disconnect d)
 	{
-		switch(d)
+		switch(d.reason)
 		{
-			case ConnectionFailed: return "Connection failed.";
-			case UnexpectedError: return "Unexpected Error.";
-			case UnexpectedResponse: return "Unexpected Response.";
-			case WriteError: return "Write Error.";
-			case ReadError: return "Read Error.";
-			case ConnectionClosed: return "Connection Closed.";
+			case Disconnect::ConnectionFailed: return "Connection failed.";
+			case Disconnect::UnexpectedError: return "Unexpected Error.";
+			case Disconnect::UnexpectedResponse: return "Unexpected Response.";
+			case Disconnect::WriteError: return "Write Error.";
+			case Disconnect::ReadError: return "Read Error.";
+			case Disconnect::ConnectionClosed: return "Connection Closed.";
 			default: return "Unknown reason.";
 		}
 	}
@@ -292,7 +292,7 @@ namespace BLEPP
 		else if(errno == ENETUNREACH || errno == EHOSTUNREACH)
 		{
 			close();
-			cb_disconnected(ConnectionFailed);
+			cb_disconnected(Disconnect(Disconnect::Reason::ConnectionFailed, errno));
 		}
 		else
 		{
@@ -345,7 +345,7 @@ namespace BLEPP
 		}
 		catch(BLEDevice::WriteError)
 		{
-			fail(WriteError);
+			fail(Disconnect(Disconnect::Reason::WriteError, errno));
 		}
 
 	}
@@ -405,7 +405,7 @@ namespace BLEPP
 		}
 		catch(BLEDevice::WriteError)
 		{
-			fail(WriteError);
+			fail(Disconnect(Disconnect::Reason::WriteError, errno));
 		}
 	}
 
@@ -429,7 +429,7 @@ namespace BLEPP
 		PDUErrorResponse err(r);
 		string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
 		LOG(Error, msg);
-		fail(UnexpectedError);
+		fail(Disconnect(Disconnect::Reason::UnexpectedError, Disconnect::NoErrorCode));
 	}
 	////////////////////////////////////////////////////////////////////////////////
 	//
@@ -459,7 +459,7 @@ namespace BLEPP
 				else
 				{
 					close();
-					cb_disconnected(ConnectionFailed);
+					cb_disconnected(Disconnect(Disconnect::Reason::ConnectionFailed, errno));
 				}
 
 			}
@@ -470,11 +470,11 @@ namespace BLEPP
 		}
 		catch(BLEDevice::WriteError)
 		{
-			fail(WriteError);
+			fail(Disconnect(Disconnect::Reason::WriteError, errno));
 		}
 		catch(BLEDevice::ReadError)
 		{
-			fail(ReadError);
+			fail(Disconnect(Disconnect::Reason::ReadError, errno));
 		}
 	}
 
@@ -527,13 +527,13 @@ namespace BLEPP
 
 				std::string msg = string("Unexpected opcode in error. Expected ") + att_op2str(last_request) + " got "  + att_op2str(err.request_opcode());
 				LOG(Error, msg);
-				fail(UnexpectedError);
+				fail(Disconnect(Disconnect::Reason::UnexpectedError, Disconnect::NoErrorCode));
 			}
 			else if(r.type() != ATT_OP_ERROR && r.type() != last_request + 1)
 			{
 				string msg = string("Unexpected response. Expected ") + att_op2str(last_request+1) + " got "  + att_op2str(r.type());
 				LOG(Error, msg);
-				fail(UnexpectedResponse);
+				fail(Disconnect(Disconnect::Reason::UnexpectedResponse, Disconnect::NoErrorCode));
 			}
 			else
 			{
@@ -695,11 +695,11 @@ namespace BLEPP
 		}
 		catch(BLEDevice::WriteError)
 		{
-			fail(WriteError);
+			fail(Disconnect(Disconnect::WriteError, errno));
 		}
 		catch(BLEDevice::ReadError)
 		{
-			fail(ReadError);
+			fail(Disconnect(Disconnect::ReadError, errno));
 		}
 	}
 		
