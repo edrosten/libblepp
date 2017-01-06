@@ -24,6 +24,9 @@
 #define __INC_LIBATTGATT_LOGGING_H
 #include <iostream>
 #include <sstream>
+#include <chrono>
+#include <iomanip>
+#include <cstdint>
 #include <blepp/xtoa.h>
 
 namespace BLEPP
@@ -65,7 +68,12 @@ namespace BLEPP{
 	#define LOG(X, Y) do{\
 		if(X <= BLEPP::log_level)\
 		{\
-			if(X >= BLEPP::LogLevels::Debug)\
+			using seconds_d = std::chrono::duration<double, std::ratio<1>>;\
+			double  now = std::chrono::duration_cast<seconds_d>(std::chrono::system_clock::now().time_since_epoch()).count();\
+			std::clog << BLEPP::log_types[X] << "(" << std::setprecision(6) << now <<  "): ";\
+			if(X >= BLEPP::LogLevels::Trace)\
+				std::clog << BLEPP::log_types[X] << ": " << __FUNCTION__ << ":" << __LINE__ <<": " << Y << std::endl;\
+			else if(X >= BLEPP::LogLevels::Debug)\
 				std::clog << BLEPP::log_types[X] << ": " << __FUNCTION__ << " " << Y << std::endl;\
 			else\
 				std::clog << BLEPP::log_types[X] << ": " << Y << std::endl;\
