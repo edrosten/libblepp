@@ -160,8 +160,29 @@ namespace BLEPP
 		int err = hci_le_set_scan_parameters(hci_fd, scan_type, interval, window,
 							own_type, filter_policy, 10000);
 		if(err < 0)
-			throw IOError("Setting scan parameters", errno);
-		
+		{
+			if(errno != EIO)
+				throw IOError("Setting scan parameters", errno);
+			else
+			{
+				//If the BLE device is already set to scanning, then we get an IO error. So
+				//try tirning it off and trying again.
+				LOG(LogLevels::Warning, "Received I/O error while setting scan parameters.");
+				LOG(LogLevels::Warning, "Switching off HCI scanner");
+				err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
+				if(err < 0)
+					throw IOError("Error disabling scan:", errno);
+
+
+				err = hci_le_set_scan_parameters(hci_fd, scan_type, interval, window, own_type, filter_policy, 10000);
+				if(err < 0)
+					throw IOError("Error disabling scan:", errno);
+				else
+					LOG(LogLevels::Warning, "Setting scan parameters worked this time.");
+
+
+			}
+		}
 		if(start_scan)
 			start();
 	}
