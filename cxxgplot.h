@@ -2,6 +2,7 @@
 #include <sstream>
 #include <vector>
 #include <cctype>
+#include <cmath>
 
 //Super simple and stupid class for interactive
 //plotting and visualisation from C++ using gnuplot

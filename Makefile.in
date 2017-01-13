@@ -30,6 +30,8 @@ PROGS=lescan blelogger bluetooth lescan_simple temperature
 
 .PHONY: all clean testclean install lib progs test doc install-so install-a install-hdr install-pkgconfig
 
+all: lib progs test doc
+
 lib: $(soname) $(archive)
 progs:$(PROGS)
 
@@ -39,7 +41,6 @@ clean: testclean
 testclean:
 	rm -f tests/*.result tests/*.test tests/*.result_ 
 
-all: lib progs test doc
 
 
 doc:
@@ -76,6 +77,12 @@ lescan_simple: lescan_simple.o
 	$(LD) -o $@ $<  -L. -lble++
 
 temperature: temperature.o 
+	$(LD) -o $@ $<  -L. -lble++
+
+blelogger: blelogger.o 
+	$(LD) -o $@ $<  -L. -lble++
+
+bluetooth: bluetooth.o 
 	$(LD) -o $@ $<  -L. -lble++
 
 install: install-so install-a install-hdr install-pkgconfig
