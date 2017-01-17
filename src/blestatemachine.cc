@@ -459,7 +459,7 @@ namespace BLEPP
 				else
 				{
 					close();
-					cb_disconnected(Disconnect(Disconnect::Reason::ConnectionFailed, errno));
+					cb_disconnected(Disconnect(Disconnect::Reason::ConnectionFailed, errval));
 				}
 
 			}
