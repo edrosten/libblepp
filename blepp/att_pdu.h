@@ -140,6 +140,27 @@ namespace BLEPP
 				return att_ecode2str(error_code());
 			}
 	};
+	/* Response to read_req, 3.F.3.4.4.4 */
+	class PDUReadResponse: public PDUResponse
+	{
+		public:
+			PDUReadResponse(const PDUResponse& p_)
+			:PDUResponse(p_)
+			{
+				type_check(ATT_OP_READ_RESP);
+			}
+			uint8_t request_opcode() const
+			{
+				return uint8(1);
+			}
+
+			uint16_t handle() const
+			{
+				return uint16(2);
+			}
+	};
+
+
 
 	/* Response to read_by_type, 3.F.3.4.4.2 */
 	class PDUReadByTypeResponse: public PDUResponse
