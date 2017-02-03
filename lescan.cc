@@ -28,10 +28,46 @@ void catch_function(int)
 	cerr << "\nInterrupted!\n";
 }
 
-int main()
+int main(int argc, char** argv)
 {
-	log_level = LogLevels::Debug;
-	HCIScanner scanner;
+	HCIScanner::ScanType type = HCIScanner::ScanType::Active;
+	HCIScanner::FilterDuplicates filter = HCIScanner::FilterDuplicates::Software;
+	int c;
+	string help = R"X(-[sHbdhp]:
+  -s  software filtering of duplicates (default)
+  -H  hardware filtering of duplicates 
+  -b  both hardware and software filtering
+  -d  show suplicates (no filtering)
+  -h  show this message
+  -p  passive scan
+)X";
+	while((c=getopt(argc, argv, "shHbnp")) != -1)
+	{
+		if(c == 'p')
+			type = HCIScanner::ScanType::Passive;
+		else if(c == 's')
+			filter = HCIScanner::FilterDuplicates::Software;
+		else if(c == 'H')
+			filter = HCIScanner::FilterDuplicates::Hardware;
+		else if(c == 'b')
+			filter = HCIScanner::FilterDuplicates::Both;
+		else if(c == 'd')
+			filter = HCIScanner::FilterDuplicates::Off;
+		else if(c == 'h')
+		{
+			cout << "Usage: " << argv[0] << " " << help;
+			return 0;
+		}
+		else 
+		{
+			cerr << argv[0] << ":  unknown option " << c << endl;
+			return 1;
+		}
+	}
+
+
+	log_level = LogLevels::Warning;
+	HCIScanner scanner(true, filter, type);
 	
 	//Catch the interrupt signal. If the scanner is not 
 	//cleaned up properly, then it doesn't reset the HCI state.
@@ -69,7 +105,18 @@ int main()
 
 			for(const auto& ad: ads)
 			{
-				cout << "Found device: " << ad.address << endl;
+				cout << "Found device: " << ad.address << " ";
+
+				if(ad.type == LeAdvertisingEventType::ADV_IND)
+					cout << "Connectable undirected" << endl;
+				else if(ad.type == LeAdvertisingEventType::ADV_DIRECT_IND)
+					cout << "Connectable directed" << endl;
+				else if(ad.type == LeAdvertisingEventType::ADV_SCAN_IND)
+					cout << "Scannable " << endl;
+				else if(ad.type == LeAdvertisingEventType::ADV_NONCONN_IND)
+					cout << "Non connectable" << endl;
+				else
+					cout << "Scan response" << endl;
 				for(const auto& uuid: ad.UUIDs)
 					cout << "  Service: " << to_str(uuid) << endl;
 				if(ad.local_name)

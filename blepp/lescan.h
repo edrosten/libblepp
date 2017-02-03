@@ -29,18 +29,32 @@
 #include <string>
 #include <stdexcept>
 #include <cstdint>
+#include <set>
 #include <boost/optional.hpp>
 #include <blepp/blestatemachine.h> //for UUID. FIXME mofo
 #include <bluetooth/hci.h>
 
 namespace BLEPP
 {
+	enum class LeAdvertisingEventType
+	{	
+		ADV_IND = 0x00, //Connectable undirected advertising 
+						//Broadcast; any device can connect or ask for more information
+		ADV_DIRECT_IND = 0x01, //Connectable Directed
+							   //Targeted; a single known device that can only connect
+		ADV_SCAN_IND = 0x02, //Scannable Undirected
+							 //Purely informative broadcast; devices can ask for more information
+		ADV_NONCONN_IND = 0x03, //Non-Connectable Undirected
+								//Purely informative broadcast; no device can connect or even ask for more information
+		SCAN_RSP = 0x04, //Result coming back after a scan request
+	};
 
 	//Is this the best design. I'm not especially convinced.
 	//It seems pretty wretched.
 	struct AdvertisingResponse
 	{
 		std::string address;
+		LeAdvertisingEventType type;
 		struct Name
 		{
 			std::string name;
@@ -107,8 +121,24 @@ namespace BLEPP
 				}
 		};
 
+
 		public:
 		
+		enum class ScanType
+		{
+			Passive  = 0x00,
+			Active   = 0x01,
+		};
+
+		enum class FilterDuplicates
+		{
+			Off, //Get all events
+			Hardware, //Rely on hardware filtering only. Lower power draw, but can actually send
+			          //duplicates if the device's builtin list gets overwhelmed.
+			Software, //Get all events from the device and filter them by hand.
+			Both      //The best and worst of both worlds. 
+		};
+
 		///Generic error exception class
 		class Error: public std::runtime_error
 		{
@@ -141,6 +171,8 @@ namespace BLEPP
 
 		HCIScanner();
 		HCIScanner(bool start);
+		HCIScanner(bool start, FilterDuplicates duplicates, ScanType);
+
 
 		void start();
 		void stop();
@@ -160,12 +192,24 @@ namespace BLEPP
 		static std::vector<AdvertisingResponse> parse_packet(const std::vector<uint8_t>& p);
 
 		private:
+			struct FilterEntry
+			{
+				explicit FilterEntry(const AdvertisingResponse&);
+				const std::string mac_address;
+				int type;
+				bool operator<(const FilterEntry&) const;
+			};
+
+			bool hardware_filtering;
+			bool software_filtering;
+
 			FD hci_fd;
 			bool running=0;
 			hci_filter old_filter;
 			
 			///Read the HCI data, but don't parse it.
 			std::vector<uint8_t> read_with_retry();
+			std::set<FilterEntry> scanned_devices;
 	};
 }
 

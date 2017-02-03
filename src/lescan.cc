@@ -1,6 +1,6 @@
-#include <blepp/lescan.h>
-#include <blepp/pretty_printers.h>
-#include <blepp/gap.h>
+#include "blepp/lescan.h"
+#include "blepp/pretty_printers.h"
+#include "blepp/gap.h"
 
 #include <bluetooth/hci_lib.h>
 #include <string>
@@ -78,23 +78,6 @@ namespace BLEPP
 			}
 	};
 
-	namespace HCI
-	{
-		enum LeAdvertisingEventType
-		{	
-			ADV_IND = 0x00, //Connectable undirected advertising 
-							//Broadcast; any device can connect or ask for more information
-			ADV_DIRECT_IND = 0x01, //Connectable Directed
-								   //Targeted; a single known device that can only connect
-			ADV_SCAN_IND = 0x02, //Scannable Undirected
-								 //Purely informative broadcast; devices can ask for more information
-			ADV_NONCONN_IND = 0x03, //Non-Connectable Undirected
-									//Purely informative broadcast; no device can connect or even ask for more information
-			SCAN_RSP = 0x04, //Result coming back after a scan request
-		};
-
-	}
-
 	AdvertisingResponse::Flags::Flags(vector<uint8_t>&& s)
 	:flag_data(s)
 	{
@@ -128,7 +111,23 @@ namespace BLEPP
 	}
 		
 	HCIScanner::HCIScanner(bool start_scan)
+	:HCIScanner(start_scan, FilterDuplicates::Both, ScanType::Active)
 	{
+	}
+
+
+	HCIScanner::HCIScanner(bool start_scan, FilterDuplicates filtering, ScanType st)
+	{
+		if(filtering == FilterDuplicates::Hardware || filtering == FilterDuplicates::Both)
+			hardware_filtering = true;
+		else
+			hardware_filtering = false;
+
+		if(filtering == FilterDuplicates::Software || filtering == FilterDuplicates::Both)
+			software_filtering = true;
+		else
+			software_filtering = false;
+
 		//Get a route to any(?) BTLE adapter (?)
 		//FIXME check errors
 		int	dev_id = hci_get_route(NULL);
@@ -139,7 +138,7 @@ namespace BLEPP
 
 		//0 = passive scan
 		//1 = active scan
-		int scan_type  = 0x01;
+		int scan_type  = static_cast<int>(st);
 
 		//Cadged from the hcitool sources. No idea what
 		//these mean
@@ -198,8 +197,10 @@ namespace BLEPP
 		if(running)
 			return;
 
+		scanned_devices.clear();
+
 		//Removal of duplicates done on the adapter itself
-		uint8_t filter_dup = 0x01;
+		uint8_t filter_dup = hardware_filtering?0x01:0x00;
 		
 		
 		//Set up the filters. 
@@ -260,7 +261,21 @@ namespace BLEPP
 		{
 		}
 	}
-
+	
+	HCIScanner::FilterEntry::FilterEntry(const AdvertisingResponse& a)
+	:mac_address(a.address),type(static_cast<int>(a.type))
+	{}
+	
+	bool HCIScanner::FilterEntry::operator<(const FilterEntry& f) const
+	{
+		//Simple lexi-sorting
+		if(mac_address < f.mac_address)
+			return true;
+		else if(mac_address == f.mac_address)
+			return type < f.type;
+		else
+			return false;
+	}
 
 	vector<uint8_t> HCIScanner::read_with_retry()
 	{
@@ -284,8 +299,26 @@ namespace BLEPP
 
 	vector<AdvertisingResponse> HCIScanner::get_advertisements()
 	{
-		return parse_packet(read_with_retry());
+		vector<AdvertisingResponse> adverts = parse_packet(read_with_retry());
+		
+		if(software_filtering)
+		{
+			vector<AdvertisingResponse> filtered;
 
+			for(const auto& a: adverts)
+			{
+				auto r = scanned_devices.insert(FilterEntry(a));
+
+				if(r.second)
+					filtered.emplace_back(move(a));
+				else
+					LOG(Debug, "Entry " << a.address << " " << static_cast<int>(a.type) << " found already");
+			}
+
+			return filtered;
+		}
+		else
+			return adverts;
 	}
 
 	/*
@@ -487,20 +520,20 @@ namespace BLEPP
 
 		for(int i=0; i < num_reports; i++)
 		{
-			uint8_t event_type = packet.pop_front();
+			LeAdvertisingEventType event_type = static_cast<LeAdvertisingEventType>(packet.pop_front());
 
-			if(event_type == HCI::ADV_IND)
+			if(event_type == LeAdvertisingEventType::ADV_IND)
 				LOG(Info, "event_type = 0x00 ADV_IND, Connectable undirected advertising");
-			else if(event_type == HCI::ADV_DIRECT_IND)
+			else if(event_type == LeAdvertisingEventType::ADV_DIRECT_IND)
 				LOG(Info, "event_type = 0x01 ADV_DIRECT_IND, Connectable directed advertising");
-			else if(event_type == HCI::ADV_SCAN_IND)
+			else if(event_type == LeAdvertisingEventType::ADV_SCAN_IND)
 				LOG(Info, "event_type = 0x02 ADV_SCAN_IND, Scannable undirected advertising");
-			else if(event_type == HCI::ADV_NONCONN_IND)
+			else if(event_type == LeAdvertisingEventType::ADV_NONCONN_IND)
 				LOG(Info, "event_type = 0x03 ADV_NONCONN_IND, Non connectable undirected advertising");
-			else if(event_type == HCI::SCAN_RSP)
+			else if(event_type == LeAdvertisingEventType::SCAN_RSP)
 				LOG(Info, "event_type = 0x04 SCAN_RSP, Scan response");
 			else
-				LOG(Info, "event_type = 0x" << hex << (int)event_type << dec << ", unknown");
+				LOG(Warning, "event_type = 0x" << hex << (int)event_type << dec << ", unknown");
 			
 			uint8_t address_type = packet.pop_front();
 
@@ -543,11 +576,10 @@ namespace BLEPP
 			else
 				LOG(Info, "RSSI = " << to_hex((uint8_t)rssi) << " unknown");
 
-				
 			try{
 				AdvertisingResponse rsp;
-
 				rsp.address = address;
+				rsp.type = event_type;
 
 				while(data.size() > 0)
 				{
