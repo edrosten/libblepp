@@ -202,6 +202,7 @@ namespace BLEPP
 
 			bool hardware_filtering;
 			bool software_filtering;
+			ScanType scan_type;
 
 			FD hci_fd;
 			bool running=0;

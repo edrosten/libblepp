@@ -128,6 +128,8 @@ namespace BLEPP
 		else
 			software_filtering = false;
 
+		scan_type=st;
+
 		//Get a route to any(?) BTLE adapter (?)
 		//FIXME check errors
 		int	dev_id = hci_get_route(NULL);
@@ -136,52 +138,6 @@ namespace BLEPP
 		//FIXME check errors
 		hci_fd.set(hci_open_dev(dev_id));
 
-		//0 = passive scan
-		//1 = active scan
-		int scan_type  = static_cast<int>(st);
-
-		//Cadged from the hcitool sources. No idea what
-		//these mean
-		uint16_t interval = htobs(0x0010);
-		uint16_t window = htobs(0x0010);
-
-		//Address for the adapter (I think). Use a public address.
-		//other option is random. Works either way it seems.
-		uint8_t own_type = LE_PUBLIC_ADDRESS;
-
-		//Don't use a whitelist (?)
-		uint8_t filter_policy = 0x00;
-
-		
-		//The 10,000 thing seems to be some sort of retry logic timeout
-		//thing. Number of miliseconds, but there are multiple tries
-		//where it gets reduced by 10ms each time. It's a bit odd.
-		int err = hci_le_set_scan_parameters(hci_fd, scan_type, interval, window,
-							own_type, filter_policy, 10000);
-		if(err < 0)
-		{
-			if(errno != EIO)
-				throw IOError("Setting scan parameters", errno);
-			else
-			{
-				//If the BLE device is already set to scanning, then we get an IO error. So
-				//try tirning it off and trying again.
-				LOG(LogLevels::Warning, "Received I/O error while setting scan parameters.");
-				LOG(LogLevels::Warning, "Switching off HCI scanner");
-				err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
-				if(err < 0)
-					throw IOError("Error disabling scan:", errno);
-
-
-				err = hci_le_set_scan_parameters(hci_fd, scan_type, interval, window, own_type, filter_policy, 10000);
-				if(err < 0)
-					throw IOError("Error disabling scan:", errno);
-				else
-					LOG(LogLevels::Warning, "Setting scan parameters worked this time.");
-
-
-			}
-		}
 		if(start_scan)
 			start();
 	}
@@ -199,6 +155,51 @@ namespace BLEPP
 		{
 			LOG(Trace, "Scanner is already running");
 			return;
+		}
+
+		//Cadged from the hcitool sources. No idea what
+		//these mean
+		uint16_t interval = htobs(0x0010);
+		uint16_t window = htobs(0x0010);
+
+		//Address for the adapter (I think). Use a public address.
+		//other option is random. Works either way it seems.
+		uint8_t own_type = LE_PUBLIC_ADDRESS;
+
+		//Don't use a whitelist (?)
+		uint8_t filter_policy = 0x00;
+
+		
+		//The 10,000 thing seems to be some sort of retry logic timeout
+		//thing. Number of miliseconds, but there are multiple tries
+		//where it gets reduced by 10ms each time. It's a bit odd.
+		int err = hci_le_set_scan_parameters(hci_fd, static_cast<int>(scan_type), interval, window,
+							own_type, filter_policy, 10000);
+		if(err < 0)
+		{
+			if(errno != EIO)
+				throw IOError("Setting scan parameters", errno);
+			else
+			{
+				//If the BLE device is already set to scanning, then we get an IO error. So
+				//try turning it off and trying again. This bad state would happen, if, to pick
+				//like a *totally* hypothetical example, the program segged-out during scanning
+				//and so never cleaned up properly.
+				LOG(LogLevels::Warning, "Received I/O error while setting scan parameters.");
+				LOG(LogLevels::Warning, "Switching off HCI scanner");
+				err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
+				if(err < 0)
+					throw IOError("Error disabling scan:", errno);
+
+
+				err = hci_le_set_scan_parameters(hci_fd, static_cast<int>(scan_type), interval, window, own_type, filter_policy, 10000);
+				if(err < 0)
+					throw IOError("Error disabling scan:", errno);
+				else
+					LOG(LogLevels::Warning, "Setting scan parameters worked this time.");
+
+
+			}
 		}
 
 		LOG(LogLevels::Info, "Starting scanner");
@@ -224,7 +225,7 @@ namespace BLEPP
 
 
 		//device disable/enable duplictes ????
-		int err = hci_le_set_scan_enable(hci_fd, 0x01, filter_dup, 10000);
+		err = hci_le_set_scan_enable(hci_fd, 0x01, filter_dup, 10000);
 		if(err < 0)
 			throw IOError("Enabling scan", errno);
 
