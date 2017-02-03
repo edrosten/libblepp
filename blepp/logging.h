@@ -63,13 +63,13 @@ namespace BLEPP{
 		return a;
 	}
 	
-	inline std::ostream& log_line_header(LogLevels x, const char* function, const int line)
+	inline std::ostream& log_line_header(LogLevels x, const char* function, const int line, const char* file)
 	{
 		std::clog << log_types[x] << " " <<  std::fixed << std::setprecision(6) << std::chrono::duration_cast<std::chrono::duration<double>>(std::chrono::system_clock::now().time_since_epoch()).count();
 		if(log_level >= Debug)
 			std::clog << " " << function;
 		if(log_level >= Trace)
-			std::clog << " " << line;
+			std::clog << " " << file << ":" << line;
 		std::clog << ": ";
 		return std::clog;
 	}
@@ -79,28 +79,29 @@ namespace BLEPP{
 	#define LOGVARHEX(Y, X) LOG(Y,  #X << " = " << std::hex <<log_no_uint8(X) <<std::dec)
 	#define LOG(X, Y) do{\
 		if(X <= BLEPP::log_level)\
-			log_line_header(X, __FUNCTION__, __LINE__) << Y << std::endl;\
+			log_line_header(X, __FUNCTION__, __LINE__, __FILE__) << Y << std::endl;\
 	}while(0)
 
 	struct EnterThenLeave
 	{
 		const char* who;
 		int where;
-		EnterThenLeave(const char *s, int w)
-		:who(s),where(w)
+		const char* file;
+		EnterThenLeave(const char *s, int w, const char* f)
+		:who(s),where(w), file(f)
 		{
 			if(BLEPP::log_level >= Trace)
-				log_line_header(Trace, who, where) << "entering" << std::endl;
+				log_line_header(Trace, who, where, file) << "entering" << std::endl;
 		}
 
 		~EnterThenLeave()
 		{
 			if(BLEPP::log_level >= Trace)
-				log_line_header(Trace, who, where) << "leaving" << std::endl;
+				log_line_header(Trace, who, where, file) << "leaving" << std::endl;
 		}
 
 	};
 
-	#define ENTER() EnterThenLeave log_enter_then_leave(__FUNCTION__, __LINE__);
+	#define ENTER() EnterThenLeave log_enter_then_leave(__FUNCTION__, __LINE__, __FILE__);
 }
 #endif

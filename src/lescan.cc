@@ -194,9 +194,14 @@ namespace BLEPP
 
 	void HCIScanner::start()
 	{
+		ENTER();
 		if(running)
+		{
+			LOG(Trace, "Scanner is already running");
 			return;
+		}
 
+		LOG(LogLevels::Info, "Starting scanner");
 		scanned_devices.clear();
 
 		//Removal of duplicates done on the adapter itself
@@ -228,8 +233,11 @@ namespace BLEPP
 
 	void HCIScanner::stop()
 	{
+		ENTER();
 		if(!running)
+		{
 			return;
+		}
 
 		LOG(LogLevels::Info, "Cleaning up HCI scanner");
 		int err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
