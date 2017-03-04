@@ -289,7 +289,6 @@ namespace BLEPP
 			void unexpected_error(const PDUErrorResponse&);
 			void fail(Disconnect);
 
-			void connect(const std::string& addresa, bool blocking);
 		public:
 
 
@@ -311,7 +310,7 @@ namespace BLEPP
 			
 			void connect_blocking(const std::string& addres);
 			void connect_nonblocking(const std::string& addres);
-
+			void connect(const std::string& addresa, bool blocking, bool pubaddr = true, std::string device = "");
 			void close();
 
 			int socket();
