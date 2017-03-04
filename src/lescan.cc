@@ -116,7 +116,7 @@ namespace BLEPP
 	}
 
 
-	HCIScanner::HCIScanner(bool start_scan, FilterDuplicates filtering, ScanType st)
+	HCIScanner::HCIScanner(bool start_scan, FilterDuplicates filtering, ScanType st, string device)
 	{
 		if(filtering == FilterDuplicates::Hardware || filtering == FilterDuplicates::Both)
 			hardware_filtering = true;
@@ -130,9 +130,17 @@ namespace BLEPP
 
 		scan_type=st;
 
-		//Get a route to any(?) BTLE adapter (?)
-		//FIXME check errors
-		int	dev_id = hci_get_route(NULL);
+		int	dev_id = 0;
+		if (device == "") {
+			//Get a route to any(?) BTLE adapter (?)
+			dev_id = hci_get_route(NULL);
+		}
+		else {
+			dev_id = hci_devid(device.c_str());
+		}
+		if (dev_id < 0) {
+			throw HCIError("Error obtaining HCI device ID");
+		}
 		
 		//Open the device
 		//FIXME check errors

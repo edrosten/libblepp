@@ -171,7 +171,7 @@ namespace BLEPP
 
 		HCIScanner();
 		HCIScanner(bool start);
-		HCIScanner(bool start, FilterDuplicates duplicates, ScanType);
+		HCIScanner(bool start, FilterDuplicates duplicates, ScanType, std::string device="");
 
 
 		void start();
