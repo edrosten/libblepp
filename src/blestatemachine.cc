@@ -228,8 +228,7 @@ namespace BLEPP
 		//a PSM (wtf?) 
 		//  Protocol Service Multiplexer (WTF?)
 		//an address (of course)
-		//a CID (wtf) 
-		//  Channel ID (i.e. port number?)
+		//a CID(Channel ID) - See bluetooth 4.2 core spec for more info, section 2.1 CHANNEL IDENTIFIERS ATTRIBUTE PROTOCOL
 		//and an address type (wtf)
 		//Holy cargo cult, Batman!
 
