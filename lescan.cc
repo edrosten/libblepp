@@ -37,11 +37,11 @@ int main(int argc, char** argv)
   -s  software filtering of duplicates (default)
   -H  hardware filtering of duplicates 
   -b  both hardware and software filtering
-  -d  show suplicates (no filtering)
+  -d  show duplicates (no filtering)
   -h  show this message
   -p  passive scan
 )X";
-	while((c=getopt(argc, argv, "shHbnp")) != -1)
+	while((c=getopt(argc, argv, "sHbdhp")) != -1)
 	{
 		if(c == 'p')
 			type = HCIScanner::ScanType::Passive;
