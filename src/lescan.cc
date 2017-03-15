@@ -597,6 +597,7 @@ namespace BLEPP
 				AdvertisingResponse rsp;
 				rsp.address = address;
 				rsp.type = event_type;
+				rsp.rssi = rssi;
 
 				while(data.size() > 0)
 				{

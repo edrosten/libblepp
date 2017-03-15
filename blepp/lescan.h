@@ -55,6 +55,7 @@ namespace BLEPP
 	{
 		std::string address;
 		LeAdvertisingEventType type;
+		int8_t rssi;
 		struct Name
 		{
 			std::string name;
