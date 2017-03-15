@@ -121,12 +121,12 @@ int main(int argc, char** argv)
 					cout << "  Service: " << to_str(uuid) << endl;
 				if(ad.local_name)
 					cout << "  Name: " << ad.local_name->name << endl;
-				if(rssi == 127)
-					cout << "  RSSI: unavailable";
-				else if(rssi <= 20)
-					cout << "  RSSI = " << (int) rssi << " dBm";
+				if(ad.rssi == 127)
+					cout << "  RSSI: unavailable" << endl;
+				else if(ad.rssi <= 20)
+					cout << "  RSSI = " << (int) ad.rssi << " dBm" << endl;
 				else
-					cout << "  RSSI = " << to_hex((uint8_t)rssi) << " unknown";
+					cout << "  RSSI = " << to_hex((uint8_t)ad.rssi) << " unknown" << endl;
 			}
 		}
 		else
