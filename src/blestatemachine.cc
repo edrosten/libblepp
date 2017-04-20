@@ -150,6 +150,7 @@ namespace BLEPP
 		if(sock != -1)
 			log_fd(::close(sock));
 		sock = -1;
+		primary_services.clear();
 	}
 
 
