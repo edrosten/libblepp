@@ -167,8 +167,11 @@ tests/%.result: tests/%.result_
 	rm -f .deps .sourcefiles
 	find . -name "*.cc" | xargs -IQQQ $(CXX) $(CXXFLAGS) -MM -MG QQQ | sed -e'/test/s!\(.*\)\.o:!tests/\1.test:!'  > .deps
 
-include .deps
+#Make compilation generate dependencies
+%.o %d: %.cc
+	$(CXX) -o $@ -c $< $(CXXFLAGS) -MMD -MP -MF $*.d
 
+include $(wildcard *.d */*.d)
 
 
 
