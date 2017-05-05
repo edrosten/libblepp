@@ -154,9 +154,14 @@ namespace BLEPP
 				return uint8(1);
 			}
 
-			uint16_t handle() const
+			int num_elements() const
 			{
-				return uint16(2);
+				return length-1;
+			}
+
+			std::pair<const uint8_t*, const uint8_t*> value() const
+			{
+				return std::make_pair(data + 1, data + length);
 			}
 	};
 

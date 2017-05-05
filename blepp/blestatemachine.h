@@ -134,6 +134,7 @@ namespace BLEPP
 		FindAllCharacteristics,
 		GetClientCharaceristicConfiguration,
 		AwaitingWriteResponse,
+		AwaitingReadResponse,
 	};
 
 	static const int Waiting=-1;
@@ -187,9 +188,11 @@ namespace BLEPP
 
 		void set_notify_and_indicate(bool , bool);
 		std::function<void(const PDUNotificationOrIndication&)> cb_notify_or_indicate;
+		std::function<void(const PDUReadResponse&)> cb_read;
 
 		void write_request(const uint8_t* data, int length);
 		void write_request(uint8_t data);
+		void read_request();
 
 		//Flags indicating various properties
 		bool broadcast, read, write_without_response, write, notify, indicate, authenticated_write, extended;
@@ -273,6 +276,7 @@ namespace BLEPP
 
 			States state = Disconnected;
 			int next_handle_to_read=-1;
+			uint16_t read_req_handle=-1;
 			int last_request=-1;
 			
 			std::vector<std::uint8_t> buf;
@@ -288,6 +292,7 @@ namespace BLEPP
 			void state_machine_write();
 			void unexpected_error(const PDUErrorResponse&);
 			void fail(Disconnect);
+			Characteristic* characteristic_of_handle(uint16_t handle);
 
 		public:
 
@@ -297,11 +302,11 @@ namespace BLEPP
 			std::function<void()> cb_connected = buggerall;
 			std::function<void(Disconnect)> cb_disconnected = buggerall2;
 			std::function<void()> cb_services_read = buggerall;
-			std::function<void()> cb_notify = buggerall;
 			std::function<void()> cb_find_characteristics = buggerall;
 			std::function<void()> cb_get_client_characteristic_configuration = buggerall;
 			std::function<void()> cb_write_response = buggerall;
 			std::function<void(Characteristic&, const PDUNotificationOrIndication&)> cb_notify_or_indicate;
+			std::function<void(Characteristic&, const PDUReadResponse&)> cb_read;
 
 
 			BLEGATTStateMachine();
@@ -323,6 +328,7 @@ namespace BLEPP
 			}
 			
 			void send_write_request(uint16_t handle, const uint8_t* data, int length);
+			void send_read_request(uint16_t handle);
 
 			void read_primary_services();
 			void find_all_characteristics();

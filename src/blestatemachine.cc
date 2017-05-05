@@ -333,6 +333,7 @@ namespace BLEPP
 		state = Idle;
 		next_handle_to_read=-1;
 		last_request=-1;
+		read_req_handle=-1;
 	}
 
 
@@ -360,6 +361,11 @@ namespace BLEPP
 			else if(state == AwaitingWriteResponse)
 			{
 				last_request = ATT_OP_WRITE_REQ;
+				//data already sent
+			}
+			else if(state == AwaitingReadResponse)
+			{
+				last_request = ATT_OP_READ_REQ;
 				//data already sent
 			}
 		}
@@ -523,19 +529,18 @@ namespace BLEPP
 			if(r.type() == ATT_OP_HANDLE_NOTIFY || r.type() == ATT_OP_HANDLE_IND)
 			{
 				PDUNotificationOrIndication n(r);
-				//Find the correct characteristic
-				for(auto& s:primary_services)
-					if(n.handle() > s.start_handle && n.handle() <= s.end_handle)
-						for(auto& c:s.characteristics)
-							if(n.handle() == c.value_handle)
-							{
-								if(c.cb_notify_or_indicate)
-									c.cb_notify_or_indicate(n);
-								else if(cb_notify_or_indicate)
-									cb_notify_or_indicate(c, n);
-								else
-									LOG(Warning, "Notify arrived, but no callback set\n");
-							}
+
+				Characteristic* c = characteristic_of_handle(n.handle());
+
+				if(c)
+				{
+					if(c->cb_notify_or_indicate)
+						c->cb_notify_or_indicate(n);
+					else if(cb_notify_or_indicate)
+						cb_notify_or_indicate(*c, n);
+					else
+						LOG(Warning, "Notify arrived, but no callback set\n");
+				}
 
 				//Respond to indications after the callback has run
 				if(!n.notification())
@@ -711,6 +716,32 @@ namespace BLEPP
 						cb_write_response();
 					}
 				}
+				else if(state == AwaitingReadResponse)
+				{
+					if(r.type() == ATT_OP_ERROR)
+					{
+						unexpected_error(r);
+					}
+					else
+					{
+						uint16_t h = read_req_handle;
+						reset();
+
+						PDUReadResponse read(r);
+						Characteristic* c = characteristic_of_handle(h);
+						LOG(Debug, "Read response: handle requested was " << to_hex(h));
+
+						if(c)
+						{
+							if(c->cb_read)
+								c->cb_read(read);
+							else if(cb_read)
+								cb_read(*c, read);
+							else
+								LOG(Warning, "Read arrived, but no callback set\n");
+						}
+					}
+				}
 			}
 		}
 		catch(BLEDevice::WriteError)
@@ -723,6 +754,33 @@ namespace BLEPP
 		}
 	}
 		
+	
+	Characteristic* BLEGATTStateMachine::characteristic_of_handle(uint16_t handle)
+	{
+		//Find the correct characteristic, given a handle.
+		for(auto& s:primary_services)
+			if(handle > s.start_handle && handle <= s.end_handle)
+				for(auto& c:s.characteristics)
+					if(handle == c.value_handle)
+						return &c;
+
+		return nullptr;
+	}
+
+	void BLEGATTStateMachine::send_read_request(uint16_t handle)
+	{
+		if(state != Idle)
+			throw logic_error("Error trying to issue command mid state");
+		dev.send_read_request(handle);
+		read_req_handle = handle;
+		state = AwaitingReadResponse;
+		state_machine_write();
+	}
+
+	void Characteristic::read_request()
+	{
+		s->send_read_request(value_handle);
+	}
 
 	void BLEGATTStateMachine::send_write_request(uint16_t handle, const uint8_t* data, int length)
 	{
