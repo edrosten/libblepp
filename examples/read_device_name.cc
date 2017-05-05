@@ -54,9 +54,6 @@ int main(int argc, char **argv)
 	//This will simply sit there happily connected in blissful ignorance if there's
 	//no temperature characteristic.
 	std::function<void()> found_services_and_characteristics_cb = [&gatt](){
-
-		pretty_print_tree(gatt);
-
 		for(auto& service: gatt.primary_services)
 			for(auto& characteristic: service.characteristics)
 				if(characteristic.uuid == UUID("2a00"))
@@ -69,10 +66,7 @@ int main(int argc, char **argv)
 						gatt.close();
 					};
 						
-					cerr << "Requesting name" << endl;
-
 					characteristic.read_request();
-					cerr << "Sent req" << endl;
 					goto name_found;
 				}
 
@@ -92,8 +86,13 @@ int main(int argc, char **argv)
 	//I think this one is reasonably clear?
 	gatt.cb_disconnected = [](BLEGATTStateMachine::Disconnect d)
 	{
-		cerr << "Disconnect for reason " << BLEGATTStateMachine::get_disconnect_string(d) << endl;
-		exit(1);
+		if(d.reason != BLEGATTStateMachine::Disconnect::ConnectionClosed)
+		{
+			cerr << "Disconnect for reason " << BLEGATTStateMachine::get_disconnect_string(d) << endl;
+			exit(1);
+		}
+		else
+			exit(0);
 	};
 	
 	//This is how to use the blocking interface. It is very simple. You provide the main 
