@@ -139,7 +139,7 @@ namespace BLEPP
 	}
 
 
-	void BLEGATTStateMachine::close()
+	void BLEGATTStateMachine::close_and_cleanup()
 	{
 		reset();
 
@@ -153,6 +153,12 @@ namespace BLEPP
 		primary_services.clear();
 	}
 
+	void BLEGATTStateMachine::close()
+	{
+		close_and_cleanup();
+		cb_disconnected(Disconnect(Disconnect::ConnectionClosed, 0));
+
+	}
 
 	int log_l2cap_options(int sock)
 	{
@@ -182,14 +188,14 @@ namespace BLEPP
 	BLEGATTStateMachine::~BLEGATTStateMachine()
 	{
 		ENTER();
-		close();
+		close_and_cleanup();
 	}
 
 	BLEGATTStateMachine::BLEGATTStateMachine()
 	:dev(sock)
 	{
 		ENTER();
-		close();
+		close_and_cleanup();
 		buf.resize(128);
 	}
 
@@ -311,7 +317,7 @@ namespace BLEPP
 		}
 		else if(errno == ENETUNREACH || errno == EHOSTUNREACH)
 		{
-			close();
+			close_and_cleanup();
 			cb_disconnected(Disconnect(Disconnect::Reason::ConnectionFailed, errno));
 		}
 		else
@@ -446,7 +452,7 @@ namespace BLEPP
 
 	void BLEGATTStateMachine::fail(Disconnect d)
 	{
-		close();
+		close_and_cleanup();
 		cb_disconnected(d);
 	}
 
@@ -484,7 +490,7 @@ namespace BLEPP
 				}
 				else
 				{
-					close();
+					close_and_cleanup();
 					cb_disconnected(Disconnect(Disconnect::Reason::ConnectionFailed, errval));
 				}
 

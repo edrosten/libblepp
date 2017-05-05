@@ -249,7 +249,7 @@ namespace BLEPP
 					UnexpectedResponse,
 					WriteError,
 					ReadError,
-					ConnectionClosed
+					ConnectionClosed,
 				} reason;
 				
 				static constexpr int NoErrorCode=1; // Any positive value
@@ -293,6 +293,7 @@ namespace BLEPP
 			void unexpected_error(const PDUErrorResponse&);
 			void fail(Disconnect);
 			Characteristic* characteristic_of_handle(uint16_t handle);
+			void close_and_cleanup();
 
 		public:
 
