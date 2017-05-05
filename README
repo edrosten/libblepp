@@ -30,3 +30,9 @@ The example programs are:
 
 * temperature: A program for logging temperature values from a device providing a standard temperature characteristic. Very short to indicate the usave, but not much error checking.
 
+
+Building the library
+--------------------
+
+There are currently autoconf (./configure) and CMake options. It's not
+a complex library to build, so either option should work fine.

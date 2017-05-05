@@ -34,6 +34,8 @@
 
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
+#include <bluetooth/hci.h>
+#include <bluetooth/hci_lib.h>
 using namespace std;
 
 
@@ -148,6 +150,7 @@ namespace BLEPP
 		if(sock != -1)
 			log_fd(::close(sock));
 		sock = -1;
+		primary_services.clear();
 	}
 
 
@@ -201,7 +204,7 @@ namespace BLEPP
 		connect(address, false);
 	}
 
-	void BLEGATTStateMachine::connect(const string& address, bool blocking)
+	void BLEGATTStateMachine::connect(const string& address, bool blocking, bool pubaddr, string device)
 	{
 		ENTER();
 
@@ -228,18 +231,35 @@ namespace BLEPP
 		//a PSM (wtf?) 
 		//  Protocol Service Multiplexer (WTF?)
 		//an address (of course)
-		//a CID (wtf) 
-		//  Channel ID (i.e. port number?)
-		//and an address type (wtf)
+		//a CID(Channel ID) - See bluetooth 4.2 core spec for more info
+		//  Section 2.1 CHANNEL IDENTIFIERS ATTRIBUTE PROTOCOL
+		//and an address type
+		//  See bluetooth 4.2 core spec for more info, section 15.1.1
+		//  Device will either have a registered "public" address, or a private "random" one that meets certain criteria
 		//Holy cargo cult, Batman!
 
 
 		sockaddr_l2 sba;
 		memset(&sba, 0, sizeof(sba));
-		sba.l2_bdaddr={{0,0,0,0,0,0}};
+		if (device == "") sba.l2_bdaddr={{0,0,0,0,0,0}}; //use default adapter
+		
+		else {
+			bdaddr_t btsrc_addr;
+			int dev_id = hci_devid(device.c_str()); //obtain device id from HCI device name
+			LOG(Debug, "dev_id = " << dev_id);
+			if (dev_id < 0) {
+				throw SocketConnectFailed("Error obtaining HCI device ID");
+			}	
+			hci_devba(dev_id, &btsrc_addr); 
+			bacpy(&sba.l2_bdaddr,&btsrc_addr); //lifted from bluez example, populate src sockaddr with address of desired device
+		}
+		
+		
+
+		
 		sba.l2_family=AF_BLUETOOTH;
 		sba.l2_cid = htobs(LE_ATT_CID);
-		sba.l2_bdaddr_type=BDADDR_LE_PUBLIC;
+		sba.l2_bdaddr_type = BDADDR_LE_PUBLIC;
 		log_fd(bind(sock, (sockaddr*)&sba , sizeof(sba)));
 
 		memset(&addr, 0, sizeof(addr));
@@ -248,9 +268,9 @@ namespace BLEPP
 		addr.l2_cid = htobs(LE_ATT_CID);
 
 
-		//Address type: Low Energy public
-		addr.l2_bdaddr_type=BDADDR_LE_PUBLIC;
-		
+		//Address type: Low Energy PUBLIC or RANDOM
+		if (pubaddr) addr.l2_bdaddr_type = BDADDR_LE_PUBLIC;
+		else addr.l2_bdaddr_type = BDADDR_LE_RANDOM;
 
 		if(log_l2cap_options(sock) == -1)
 		{

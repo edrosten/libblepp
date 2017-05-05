@@ -1,6 +1,6 @@
-#include <blepp/lescan.h>
-#include <blepp/pretty_printers.h>
-#include <blepp/gap.h>
+#include "blepp/lescan.h"
+#include "blepp/pretty_printers.h"
+#include "blepp/gap.h"
 
 #include <bluetooth/hci_lib.h>
 #include <string>
@@ -78,23 +78,6 @@ namespace BLEPP
 			}
 	};
 
-	namespace HCI
-	{
-		enum LeAdvertisingEventType
-		{	
-			ADV_IND = 0x00, //Connectable undirected advertising 
-							//Broadcast; any device can connect or ask for more information
-			ADV_DIRECT_IND = 0x01, //Connectable Directed
-								   //Targeted; a single known device that can only connect
-			ADV_SCAN_IND = 0x02, //Scannable Undirected
-								 //Purely informative broadcast; devices can ask for more information
-			ADV_NONCONN_IND = 0x03, //Non-Connectable Undirected
-									//Purely informative broadcast; no device can connect or even ask for more information
-			SCAN_RSP = 0x04, //Result coming back after a scan request
-		};
-
-	}
-
 	AdvertisingResponse::Flags::Flags(vector<uint8_t>&& s)
 	:flag_data(s)
 	{
@@ -128,18 +111,59 @@ namespace BLEPP
 	}
 		
 	HCIScanner::HCIScanner(bool start_scan)
+	:HCIScanner(start_scan, FilterDuplicates::Both, ScanType::Active)
 	{
-		//Get a route to any(?) BTLE adapter (?)
-		//FIXME check errors
-		int	dev_id = hci_get_route(NULL);
+	}
+
+
+	HCIScanner::HCIScanner(bool start_scan, FilterDuplicates filtering, ScanType st, string device)
+	{
+		if(filtering == FilterDuplicates::Hardware || filtering == FilterDuplicates::Both)
+			hardware_filtering = true;
+		else
+			hardware_filtering = false;
+
+		if(filtering == FilterDuplicates::Software || filtering == FilterDuplicates::Both)
+			software_filtering = true;
+		else
+			software_filtering = false;
+
+		scan_type=st;
+
+		int	dev_id = 0;
+		if (device == "") {
+			//Get a route to any(?) BTLE adapter (?)
+			dev_id = hci_get_route(NULL);
+		}
+		else {
+			dev_id = hci_devid(device.c_str());
+		}
+		if (dev_id < 0) {
+			throw HCIError("Error obtaining HCI device ID");
+		}
 		
 		//Open the device
 		//FIXME check errors
 		hci_fd.set(hci_open_dev(dev_id));
 
-		//0 = passive scan
-		//1 = active scan
-		int scan_type  = 0x01;
+		if(start_scan)
+			start();
+	}
+
+	HCIScanner::HCIScanner()
+	:HCIScanner(true)
+	{
+
+	}
+
+	void HCIScanner::start()
+	{
+		ENTER();
+		if(running)
+		{
+			LOG(Trace, "Scanner is already running");
+			return;
+		}
 
 		//Cadged from the hcitool sources. No idea what
 		//these mean
@@ -157,7 +181,7 @@ namespace BLEPP
 		//The 10,000 thing seems to be some sort of retry logic timeout
 		//thing. Number of miliseconds, but there are multiple tries
 		//where it gets reduced by 10ms each time. It's a bit odd.
-		int err = hci_le_set_scan_parameters(hci_fd, scan_type, interval, window,
+		int err = hci_le_set_scan_parameters(hci_fd, static_cast<int>(scan_type), interval, window,
 							own_type, filter_policy, 10000);
 		if(err < 0)
 		{
@@ -166,7 +190,9 @@ namespace BLEPP
 			else
 			{
 				//If the BLE device is already set to scanning, then we get an IO error. So
-				//try tirning it off and trying again.
+				//try turning it off and trying again. This bad state would happen, if, to pick
+				//like a *totally* hypothetical example, the program segged-out during scanning
+				//and so never cleaned up properly.
 				LOG(LogLevels::Warning, "Received I/O error while setting scan parameters.");
 				LOG(LogLevels::Warning, "Switching off HCI scanner");
 				err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
@@ -174,7 +200,7 @@ namespace BLEPP
 					throw IOError("Error disabling scan:", errno);
 
 
-				err = hci_le_set_scan_parameters(hci_fd, scan_type, interval, window, own_type, filter_policy, 10000);
+				err = hci_le_set_scan_parameters(hci_fd, static_cast<int>(scan_type), interval, window, own_type, filter_policy, 10000);
 				if(err < 0)
 					throw IOError("Error disabling scan:", errno);
 				else
@@ -183,23 +209,12 @@ namespace BLEPP
 
 			}
 		}
-		if(start_scan)
-			start();
-	}
 
-	HCIScanner::HCIScanner()
-	:HCIScanner(true)
-	{
-
-	}
-
-	void HCIScanner::start()
-	{
-		if(running)
-			return;
+		LOG(LogLevels::Info, "Starting scanner");
+		scanned_devices.clear();
 
 		//Removal of duplicates done on the adapter itself
-		uint8_t filter_dup = 0x01;
+		uint8_t filter_dup = hardware_filtering?0x01:0x00;
 		
 		
 		//Set up the filters. 
@@ -218,7 +233,7 @@ namespace BLEPP
 
 
 		//device disable/enable duplictes ????
-		int err = hci_le_set_scan_enable(hci_fd, 0x01, filter_dup, 10000);
+		err = hci_le_set_scan_enable(hci_fd, 0x01, filter_dup, 10000);
 		if(err < 0)
 			throw IOError("Enabling scan", errno);
 
@@ -227,8 +242,11 @@ namespace BLEPP
 
 	void HCIScanner::stop()
 	{
+		ENTER();
 		if(!running)
+		{
 			return;
+		}
 
 		LOG(LogLevels::Info, "Cleaning up HCI scanner");
 		int err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
@@ -260,7 +278,21 @@ namespace BLEPP
 		{
 		}
 	}
-
+	
+	HCIScanner::FilterEntry::FilterEntry(const AdvertisingResponse& a)
+	:mac_address(a.address),type(static_cast<int>(a.type))
+	{}
+	
+	bool HCIScanner::FilterEntry::operator<(const FilterEntry& f) const
+	{
+		//Simple lexi-sorting
+		if(mac_address < f.mac_address)
+			return true;
+		else if(mac_address == f.mac_address)
+			return type < f.type;
+		else
+			return false;
+	}
 
 	vector<uint8_t> HCIScanner::read_with_retry()
 	{
@@ -284,8 +316,26 @@ namespace BLEPP
 
 	vector<AdvertisingResponse> HCIScanner::get_advertisements()
 	{
-		return parse_packet(read_with_retry());
+		vector<AdvertisingResponse> adverts = parse_packet(read_with_retry());
+		
+		if(software_filtering)
+		{
+			vector<AdvertisingResponse> filtered;
 
+			for(const auto& a: adverts)
+			{
+				auto r = scanned_devices.insert(FilterEntry(a));
+
+				if(r.second)
+					filtered.emplace_back(move(a));
+				else
+					LOG(Debug, "Entry " << a.address << " " << static_cast<int>(a.type) << " found already");
+			}
+
+			return filtered;
+		}
+		else
+			return adverts;
 	}
 
 	/*
@@ -487,20 +537,20 @@ namespace BLEPP
 
 		for(int i=0; i < num_reports; i++)
 		{
-			uint8_t event_type = packet.pop_front();
+			LeAdvertisingEventType event_type = static_cast<LeAdvertisingEventType>(packet.pop_front());
 
-			if(event_type == HCI::ADV_IND)
+			if(event_type == LeAdvertisingEventType::ADV_IND)
 				LOG(Info, "event_type = 0x00 ADV_IND, Connectable undirected advertising");
-			else if(event_type == HCI::ADV_DIRECT_IND)
+			else if(event_type == LeAdvertisingEventType::ADV_DIRECT_IND)
 				LOG(Info, "event_type = 0x01 ADV_DIRECT_IND, Connectable directed advertising");
-			else if(event_type == HCI::ADV_SCAN_IND)
+			else if(event_type == LeAdvertisingEventType::ADV_SCAN_IND)
 				LOG(Info, "event_type = 0x02 ADV_SCAN_IND, Scannable undirected advertising");
-			else if(event_type == HCI::ADV_NONCONN_IND)
+			else if(event_type == LeAdvertisingEventType::ADV_NONCONN_IND)
 				LOG(Info, "event_type = 0x03 ADV_NONCONN_IND, Non connectable undirected advertising");
-			else if(event_type == HCI::SCAN_RSP)
+			else if(event_type == LeAdvertisingEventType::SCAN_RSP)
 				LOG(Info, "event_type = 0x04 SCAN_RSP, Scan response");
 			else
-				LOG(Info, "event_type = 0x" << hex << (int)event_type << dec << ", unknown");
+				LOG(Warning, "event_type = 0x" << hex << (int)event_type << dec << ", unknown");
 			
 			uint8_t address_type = packet.pop_front();
 
@@ -543,11 +593,11 @@ namespace BLEPP
 			else
 				LOG(Info, "RSSI = " << to_hex((uint8_t)rssi) << " unknown");
 
-				
 			try{
 				AdvertisingResponse rsp;
-
 				rsp.address = address;
+				rsp.type = event_type;
+				rsp.rssi = rssi;
 
 				while(data.size() > 0)
 				{

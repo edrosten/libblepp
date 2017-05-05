@@ -80,6 +80,13 @@ namespace BLEPP
 		test_fd_<BLEDevice::WriteError>(read(sock, buf, len), line);
 	}
 
+	void BLEDevice::send_read_request(uint16_t handle)
+	{
+		int len = enc_read_req(handle, buf.data(), buf.size());
+		test_pdu(len);
+		int ret = write(sock, buf.data(), len);
+		test(ret, Write);
+	}
 
 	void BLEDevice::send_read_by_type(const bt_uuid_t& uuid, uint16_t start, uint16_t end)
 	{

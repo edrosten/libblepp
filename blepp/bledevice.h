@@ -49,6 +49,7 @@ namespace BLEPP
 		void test_pdu(int len);
 		BLEDevice(const int& sock_);
 
+		void send_read_request(std::uint16_t handle);
 		void send_read_by_type(const bt_uuid_t& uuid, std::uint16_t start = 0x0001, std::uint16_t end=0xffff);
 		void send_find_information(std::uint16_t start = 0x0001, std::uint16_t end=0xffff);
 		void send_read_group_by_type(const bt_uuid_t& uuid, std::uint16_t start = 0x0001, std::uint16_t end=0xffff);
