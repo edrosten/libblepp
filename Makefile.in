@@ -69,33 +69,21 @@ $(archive): $(LIBOBJS)
 
 $(PROGS):$(soname)
 
-lescan: lescan.o 
-	$(LD) -o $@ $<  -L. -lble++
-
-
-lescan_simple: lescan_simple.o 
-	$(LD) -o $@ $<  -L. -lble++
-
-temperature: temperature.o 
-	$(LD) -o $@ $<  -L. -lble++
-
-blelogger: blelogger.o 
-	$(LD) -o $@ $<  -L. -lble++
-
-bluetooth: bluetooth.o 
+$(PROGS:%=%.o): | examples
+$(PROGS): % : %.o | examples
 	$(LD) -o $@ $<  -L. -lble++
 
 install: install-so install-a install-hdr install-pkgconfig
 
 
-install-a: $(archive)
+install-a: $(archive) | $(lib)
 	cp $(archive) $(lib)
 
-install-so: $(soname) $(soname1) $(soname2)
+install-so: $(soname) $(soname1) $(soname2) | $(lib)
 	cp $(soname) $(soname1) $(soname2) $(lib)
 
-install-hdr:
-	cp -r blepp $(hdr)
+install-hdr: | $(hdr)
+	cp -r $(srcdir)/blepp $(hdr)
 
 install-pkgconfig:
 	[ "$(pkgconfig)" = "" ] || mkdir -p $(DESTDIR)$(pkgconfig)
@@ -108,7 +96,7 @@ docs:
 
 
 #Every .cc file in the tests directory is a test
-TESTS=$(notdir $(basename $(wildcard tests/*.cc)))
+TESTS=$(notdir $(basename $(wildcard $(srcdir)/tests/*.cc)))
 
 
 #Get the intermediate file names from the list of tests.
@@ -137,12 +125,12 @@ tests/results:$(TEST_RESULT)
 
 #Build a test executable from a test program. On compile error,
 #create an executable which declares the error.
-tests/%.test: tests/%.cc $(LIBOBJS)
+tests/%.test: tests/%.cc $(LIBOBJS) | tests
 	$(CXX) $(CXXFLAGS) $^ -o $@ -I . $(LDFLAGS) $(LOADLIBES) || {  echo "echo 'Compile error!' ; return 126" > $@ ; chmod +x $@; }
 
 #Run the program and either use it's output (it should just say OK)
 #or a failure message
-tests/%.result_: tests/%.test
+tests/%.result_: tests/%.test | tests
 	$< > $@ 2>&1 ; \
 	a=$$? ;\
 	if [ $$a != 0 ]; \
@@ -173,6 +161,10 @@ tests/%.result: tests/%.result_
 
 include $(wildcard *.d */*.d)
 
+$(LIBOBJS): | $(sort $(dir $(LIBOBJS)))
+tests/results: | $(if $(wildcard tests),,tests)
 
+examples tests $(sort $(dir $(LIBOBJS))) $(lib) $(hdr):
+	mkdir -p $@
 
 
