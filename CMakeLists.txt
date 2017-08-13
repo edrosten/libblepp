@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.7)
+cmake_minimum_required(VERSION 3.4)
 project(ble++)
 
 set(HEADERS
@@ -27,11 +27,11 @@ set(SRC
     ${HEADERS})
 
 set(EXAMPLES
-    lescan.cc
-    blelogger.cc
-    bluetooth.cc
-    lescan_simple.cc
-    temperature.cc)
+    examples/lescan.cc
+    examples/blelogger.cc
+    examples/bluetooth.cc
+    examples/lescan_simple.cc
+    examples/temperature.cc)
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
 
