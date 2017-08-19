@@ -191,8 +191,22 @@ namespace BLEPP
 		std::function<void(const PDUReadResponse&)> cb_read;
 
 		void write_request(const uint8_t* data, int length);
-		void write_request(uint8_t data);
+		void write_command(const uint8_t* data, int length);
 		void read_request();
+
+		// Shortcuts for writing values without explicitly using sizeof and pointer cast.
+		// Don't forget to explicitly cast when writing numbers!, e.g. write_request((uint16_t)3)
+		// Also, don't forget about alignment when sending structs. Suggest __attribute__((pack))
+		template <typename T>
+		void write_request(const T& data)
+		{
+			write_request((const uint8_t*)&data, sizeof(data));
+		}
+		template <typename T>
+		void write_command(const T& data)
+		{
+			write_command((const uint8_t*)&data, sizeof(data));
+		}
 
 		//Flags indicating various properties
 		bool broadcast, read, write_without_response, write, notify, indicate, authenticated_write, extended;
@@ -329,6 +343,7 @@ namespace BLEPP
 			}
 			
 			void send_write_request(uint16_t handle, const uint8_t* data, int length);
+			void send_write_command(uint16_t handle, const uint8_t* data, int length);
 			void send_read_request(uint16_t handle);
 
 			void read_primary_services();

@@ -57,7 +57,7 @@ int main(int argc, char **argv)
 					if(characteristic.uuid == UUID("b8637601-a003-436d-a995-2a7f20bcb3d4"))
 					{
 						//Send a 1 (you can also send longer chunks of data too)
-						characteristic.write_request(1);	
+						characteristic.write_request(uint8_t(1));
 					}
 	};
 	
