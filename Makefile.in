@@ -23,6 +23,11 @@ LDFLAGS=@LDFLAGS@
 hdr = $(DESTDIR)$(includedir)/
 lib = $(DESTDIR)$(libdir)/
 
+archive=libble++.a
+soname=libble++.so
+soname1=libble++.so.0
+soname2=libble++.so.0.5
+set_soname=-Wl,-soname,libble++.so.0
 
 LIBOBJS=src/att.o src/uuid.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o src/logging.o src/lescan.o
 
@@ -36,21 +41,17 @@ lib: $(soname) $(archive)
 progs:$(PROGS)
 
 
+distclean: clean
+	rm -f Makefile config.log config.status libblepp.pc
 clean: testclean
 	rm -f $(PROGS) *.o */*.o *.so.* *.so *.d */*.d $(soname) $(soname1) $(soname2) $(archive)
 testclean:
-	rm -f tests/*.result tests/*.test tests/*.result_ 
+	rm -f tests/*.result tests/*.test tests/*.result_ tests/results
 
 
 
 doc:
 
-
-archive=libble++.a
-soname=libble++.so
-soname1=libble++.so.0
-soname2=libble++.so.0.5
-set_soname=-Wl,-soname,libble++.so.0
 
 $(soname2): $(LIBOBJS)
 	$(LD) -shared -o $(soname2) $(LIBOBJS) $(LDFLAGS) $(LOADLIBES)
@@ -67,7 +68,7 @@ $(archive): $(LIBOBJS)
 	ar crvs $(archive) $(LIBOBJS)
 	ranlib $(archive)
 
-$(PROGS):$(soname)
+$(PROGS):|$(soname)
 
 $(PROGS:%=%.o): | examples
 $(PROGS): % : %.o | examples
