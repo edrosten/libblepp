@@ -802,11 +802,18 @@ namespace BLEPP
 		s->send_write_request(value_handle, data, length);
 	}
 
-
-	void Characteristic::write_request(const uint8_t data)
+	void BLEGATTStateMachine::send_write_command(uint16_t handle, const uint8_t* data, int length)
 	{
-		s->send_write_request(value_handle, &data, 1);
+		if(state != Idle)
+			throw logic_error("Error trying to issue command mid state");
+		dev.send_write_command(handle, data, length);
 	}
+
+	void Characteristic::write_command(const uint8_t*data, int length)
+	{
+		s->send_write_command(value_handle, data, length);
+	}
+
 
 	void Characteristic::set_notify_and_indicate(bool notify, bool indicate)
 	{

@@ -1,6 +1,8 @@
 cmake_minimum_required(VERSION 3.4)
 project(ble++)
 
+set(CMAKE_CXX_STANDARD 11)
+
 set(HEADERS
     blepp/bledevice.h
     blepp/logging.h
@@ -46,6 +48,7 @@ foreach (example_src ${EXAMPLES})
 
     add_executable(${example_name} ${example_src})
     target_link_libraries(${example_name} ${PROJECT_NAME} ${BLUEZ_LIBRARIES})
+    set_target_properties(${example_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY examples)
 endforeach()
 
 install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib)
