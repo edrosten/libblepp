@@ -416,7 +416,7 @@ namespace BLEPP
 		state_machine_write();
 	}
 
-	void BLEGATTStateMachine::set_notify_and_indicate(Characteristic& c, bool notify, bool indicate)
+	void BLEGATTStateMachine::set_notify_and_indicate(Characteristic& c, bool notify, bool indicate, bool request)
 	{
 		LOG(Trace, "BLEGATTStateMachine::enable_indications(Characteristic&)");
 
@@ -433,7 +433,13 @@ namespace BLEPP
 
 
 		try{
-			dev.send_write_command(c.client_characteric_configuration_handle, c.ccc_last_known_value);
+			if (request) {
+				dev.send_write_request(c.client_characteric_configuration_handle, c.ccc_last_known_value);
+				state = AwaitingWriteResponse;
+				state_machine_write();
+			} else {
+				dev.send_write_command(c.client_characteric_configuration_handle, c.ccc_last_known_value);
+			}
 		}
 		catch(BLEDevice::WriteError)
 		{
@@ -815,10 +821,10 @@ namespace BLEPP
 	}
 
 
-	void Characteristic::set_notify_and_indicate(bool notify, bool indicate)
+	void Characteristic::set_notify_and_indicate(bool notify, bool indicate, bool request)
 	{
 		LOG(Trace, "Characteristic::enable_indications()");
-		s->set_notify_and_indicate(*this, notify, indicate);
+		s->set_notify_and_indicate(*this, notify, indicate, request);
 	}
 
 
