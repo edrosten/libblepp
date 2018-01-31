@@ -186,7 +186,7 @@ namespace BLEPP
 		:s(s_)
 		{}
 
-		void set_notify_and_indicate(bool , bool);
+		void set_notify_and_indicate(bool , bool, bool request = false);
 		std::function<void(const PDUNotificationOrIndication&)> cb_notify_or_indicate;
 		std::function<void(const PDUReadResponse&)> cb_read;
 
@@ -351,7 +351,7 @@ namespace BLEPP
 			void get_client_characteristic_configuration();
 			void read_and_process_next();
 			void write_and_process_next();
-			void set_notify_and_indicate(Characteristic& c, bool notify, bool indicate);
+			void set_notify_and_indicate(Characteristic& c, bool notify, bool indicate, bool request = false);
 
 
 			void setup_standard_scan(std::function<void()>& cb);
