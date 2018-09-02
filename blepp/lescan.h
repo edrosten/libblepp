@@ -85,7 +85,7 @@ namespace BLEPP
 		std::vector<std::vector<uint8_t>> manufacturer_specific_data;
 		std::vector<std::vector<uint8_t>> service_data;
 		std::vector<std::vector<uint8_t>> unparsed_data_with_types;
-
+		std::vector<std::vector<uint8_t>> raw_packet;
 	};
 
 	/// Class for scanning for BLE devices
