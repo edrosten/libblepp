@@ -598,6 +598,7 @@ namespace BLEPP
 				rsp.address = address;
 				rsp.type = event_type;
 				rsp.rssi = rssi;
+				rsp.raw_packet.push_back({data.begin(), data.end()});
 
 				while(data.size() > 0)
 				{
@@ -609,6 +610,7 @@ namespace BLEPP
 					LOGVAR(Debug, length);
 
 					Span chunk = data.pop_front(length);
+
 					uint8_t type = chunk[0];
 					LOGVAR(Debug, type);
 
