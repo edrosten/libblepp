@@ -58,6 +58,7 @@ namespace BLEPP
 		void send_handle_value_confirmation();
 		void send_write_command(std::uint16_t handle, const std::uint8_t* data, int length);
 		void send_write_command(std::uint16_t handle, std::uint16_t data);
+		void send_pdu(PDUResponse &pdu);
 		PDUResponse receive(std::uint8_t* buf, int max);
 		PDUResponse receive(std::vector<std::uint8_t>& v);
 	};

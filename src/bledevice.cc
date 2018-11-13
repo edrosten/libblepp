@@ -148,6 +148,11 @@ namespace BLEPP
 		send_write_command(handle, buf, 2);
 	}
 
+	void BLEDevice::send_pdu(PDUResponse &pdu)
+	{
+			int len = write(sock,pdu.data,pdu.length);
+			test(len, Write);
+	}
 
 	PDUResponse BLEDevice::receive(uint8_t* buf, int max)
 	{

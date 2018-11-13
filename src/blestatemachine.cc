@@ -559,10 +559,18 @@ namespace BLEPP
 				if(!n.notification())
 					dev.send_handle_value_confirmation();
 			}
+			//client is asking for MTU negotiation, ATTRIBUTE PROTOCOL 3.2.8, 3.4.2 MTU exchange of bluetooth core spec
+			else if (r.type() == ATT_OP_MTU_REQ) { //TODO implement ATT buffer resize
+				uint8_t pdu[3];
+				uint16_t current_mtu = (uint16_t)dev.buf.size();
+				int minlen = enc_mtu_resp(current_mtu,pdu,3);
+				PDUResponse prsp(pdu,3);
+				dev.send_pdu(prsp);
+				LOG(Debug,"Sending MTU Resp len " << current_mtu);
+			}
 			else if(r.type() == ATT_OP_ERROR && PDUErrorResponse(r).request_opcode() != last_request)
 			{
 				PDUErrorResponse err(r);
-
 				std::string msg = string("Unexpected opcode in error. Expected ") + att_op2str(last_request) + " got "  + att_op2str(err.request_opcode());
 				LOG(Error, msg);
 				fail(Disconnect(Disconnect::Reason::UnexpectedError, Disconnect::NoErrorCode));
