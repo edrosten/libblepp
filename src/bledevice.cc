@@ -176,9 +176,9 @@ namespace BLEPP
 		// For performance, this could be raised if desired
 		if (my_final_mtu > my_current_mtu) //remote device's MTU is larger, increase local ATT buffer
 		{
-			buf.resize(req_mtu);
-			LOG(Debug,"Resized local MTU from " << my_current_mtu << " to " << req_mtu);
-			my_current_mtu = req_mtu;
+			buf.resize(my_final_mtu);
+			LOG(Debug,"Resized local MTU from " << my_current_mtu << " to " << my_final_mtu);
+			my_current_mtu = my_final_mtu;
 		}
 
 		int my_resp_pdu_len = enc_mtu_resp(my_current_mtu,my_resp_pdu,3);
