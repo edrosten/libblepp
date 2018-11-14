@@ -148,10 +148,70 @@ namespace BLEPP
 		send_write_command(handle, buf, 2);
 	}
 
-	void BLEDevice::send_pdu(PDUResponse &pdu)
+	void BLEDevice::process_att_mtu_request(PDUResponse &req_pdu)
 	{
-			int len = write(sock,pdu.data,pdu.length);
-			test(len, Write);
+		uint8_t my_resp_pdu[3]; //1 byte opcode, two byte param with the size of negotiated MTU
+		uint8_t my_req_pdu[3];
+		uint16_t my_current_mtu = (uint16_t)buf.size();
+		uint16_t my_last_mtu = my_current_mtu;
+		uint16_t my_final_mtu = my_current_mtu;
+		uint16_t req_mtu;
+		uint8_t rec_pdu_dec_len = dec_mtu_req(req_pdu.data,req_pdu.length,&req_mtu);
+		if (req_pdu.length != 3 || rec_pdu_dec_len == 0 || req_mtu < ATT_DEFAULT_LE_MTU)
+		{
+			LOG(Error,"Unexpected format on inbound MTU request");
+			return;
+		}
+		if (req_mtu > my_current_mtu) my_final_mtu = req_mtu;
+		uint8_t req_enc_len = enc_mtu_req(my_final_mtu,my_req_pdu,3); //generate a request PDU to send to the remote end with new size
+		if (req_enc_len == 0) {
+			LOG(Error,"Error encoding outbound MTU request");
+			return;
+		}
+		LOG(Debug,"Sending MTU Request " << req_mtu);
+		int len = write(sock,my_req_pdu,3); //send MTU request before we resize our buffer, to spec
+		test(len, Write);
+		//TODO
+		// We are just accepting the remote end max recv MTU as our max
+		// For performance, this could be raised if desired
+		if (my_final_mtu > my_current_mtu) //remote device's MTU is larger, increase local ATT buffer
+		{
+			buf.resize(req_mtu);
+			LOG(Debug,"Resized local MTU from " << my_current_mtu << " to " << req_mtu);
+			my_current_mtu = req_mtu;
+		}
+
+		int my_resp_pdu_len = enc_mtu_resp(my_current_mtu,my_resp_pdu,3);
+		if (my_resp_pdu_len <= 0)
+		{
+			LOG(Error,"Error generating MTU Response PDU");
+			buf.resize(my_last_mtu);
+			LOG(Error,"Recovered local MTU to " << my_last_mtu);
+			return;
+		}
+		len = write(sock,my_resp_pdu,3); //send MTU response
+		test(len, Write);
+		LOG(Debug,"Sending MTU Resp " << my_current_mtu);
+	}
+
+	void BLEDevice::process_att_mtu_response(PDUResponse &resp_pdu)
+	{
+		uint16_t resp_mtu;
+		uint16_t my_current_mtu = (uint16_t)buf.size();
+		uint8_t rec_pdu_dec_len = dec_mtu_resp(resp_pdu.data,resp_pdu.length,&resp_mtu);
+		if (resp_pdu.length != 3 || rec_pdu_dec_len == 0 || resp_mtu < ATT_DEFAULT_LE_MTU)
+		{
+			LOG(Error,"Unexpected format on inbound MTU request");
+			return;
+		}
+		//TODO implement downsizing local buffer if we oversized it in process_att_mtu_request
+		//buffer should be negotiated to the lowest MTU requested and received between client\server
+		//currently we are forcing to the remote MTU, so this is always the case
+		if (my_current_mtu != resp_mtu)
+		{
+			LOG(Error,"Remote device MTU does not match our MTU which was set moments ago.");
+			return;
+		}
 	}
 
 	PDUResponse BLEDevice::receive(uint8_t* buf, int max)
