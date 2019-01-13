@@ -592,8 +592,8 @@ namespace BLEPP
 						if(PDUErrorResponse(r).error_code() == ATT_ECODE_ATTR_NOT_FOUND)
 						{
 							//Maybe ? Indicates that the last one has been read.
-							cb_services_read();
 							reset();
+							cb_services_read();
 						}
 						else
 							unexpected_error(r);
