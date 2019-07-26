@@ -35,7 +35,7 @@ set(EXAMPLES
     examples/lescan_simple.cc
     examples/temperature.cc)
 
-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
+set(CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake/modules;${CMAKE_MODULE_PATH}")
 
 find_package(Bluez REQUIRED)
 
