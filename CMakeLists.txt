@@ -35,7 +35,7 @@ set(EXAMPLES
     examples/lescan_simple.cc
     examples/temperature.cc)
 
-set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
+LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
 find_package(Bluez REQUIRED)
 
@@ -53,3 +53,4 @@ endforeach()
 
 install(TARGETS ${PROJECT_NAME} LIBRARY DESTINATION lib)
 install(DIRECTORY blepp DESTINATION include)
+
