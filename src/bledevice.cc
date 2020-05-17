@@ -322,4 +322,8 @@ namespace BLEPP
 		buf.resize(ATT_DEFAULT_MTU);
 	}
 
+	void BLEDevice::set_buffer_size(size_t buffer_size) {
+		buf.resize(buffer_size);
+	}
+
 }

@@ -360,6 +360,8 @@ namespace BLEPP
 
 
 			void setup_standard_scan(std::function<void()>& cb);
+
+			void set_device_buffer_size(size_t size);
 	};
 
 
