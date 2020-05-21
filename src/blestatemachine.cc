@@ -922,8 +922,4 @@ namespace BLEPP
 		};
 	}
 
-	void BLEGATTStateMachine::set_device_buffer_size(size_t size) {
-		dev.set_buffer_size(size);
-	}
-
 }
