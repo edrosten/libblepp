@@ -62,7 +62,6 @@ namespace BLEPP
 		void process_att_mtu_response(PDUResponse &resp_pdu);
 		PDUResponse receive(std::uint8_t* buf, int max);
 		PDUResponse receive(std::vector<std::uint8_t>& v);
-		void set_buffer_size(size_t buffer_size);
 	};
 
 }

@@ -569,6 +569,7 @@ namespace BLEPP
 			else if (r.type() == ATT_OP_MTU_RESP)
 			{
 				dev.process_att_mtu_response(r);
+				buf.resize(dev.buf.size());
 			}
 			else if(r.type() == ATT_OP_ERROR && PDUErrorResponse(r).request_opcode() != last_request)
 			{
@@ -920,10 +921,6 @@ namespace BLEPP
 		{
 			read_primary_services();
 		};
-	}
-
-	void BLEGATTStateMachine::set_device_buffer_size(size_t size) {
-		dev.set_buffer_size(size);
 	}
 
 }
