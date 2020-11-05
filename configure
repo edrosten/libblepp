@@ -2607,7 +2607,7 @@ $as_echo_n "checking ... " >&6; }
 	save_CXXFLAGS="$CXXFLAGS"
 	CXXFLAGS="$CXXFLAGS -Wall"
 
-
+CXXFLAGS="$CXXFLAGS -Wno-unused-but-set-parameter -Wno-unused-variable -Wno-unused-parameter"
 
 
 cat confdefs.h - <<_ACEOF >conftest.$ac_ext
