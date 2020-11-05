@@ -37,7 +37,7 @@ set(EXAMPLES
 
 set(CMAKE_MODULE_PATH ${CMAKE_SOURCE_DIR}/cmake/modules)
 
-set(CMAKE_CXX_FLAGS "std=c++11 -Wno-unused-but-set-parameter -Wno-unused-variable -Wno-unused-parameter")
+set(CMAKE_CXX_FLAGS "-Wno-unused-but-set-parameter -Wno-unused-variable -Wno-unused-parameter")
 
 find_package(Bluez REQUIRED)
 
