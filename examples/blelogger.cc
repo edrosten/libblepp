@@ -29,6 +29,9 @@
 #include <random>
 #include <iterator>
 #include <deque>
+#include <cerrno>
+#include <cstring>
+#include <fstream>
 #include "cxxgplot.h"
 using namespace std;
 using namespace chrono;
@@ -210,13 +213,9 @@ vector<uint8_t> decompress(const vector<uint8_t> d)
 	int len = d.size();
 	int nybbles = (len-2)*2;
 
-//cout << "decompress...\n";
-
 	int n_ind = 0;
 	while(n_ind < nybbles){
 		uint8_t nybble = get_nybble(d.data()+1, n_ind++);
-
-//cout << "nybble " << n_ind << " " << 0+nybble << " " << ret.size() << "    " << 0+v_0 << "\n";	
 		uint8_t dv;
 
 		// check for end condition
@@ -235,7 +234,6 @@ vector<uint8_t> decompress(const vector<uint8_t> d)
 				dv = nybble -8 + 249;
 
 		}
-//cout << "    " << 0+dv << endl;
 		v_0 += dv;
 		ret.push_back(v_0);
 	}
@@ -268,10 +266,6 @@ void test(){
 		}
 	}
 
-//	for(const auto& p:compressed)
-//		cout << p.size() << " ";
-//	cout << "\n";
-
 	vector<uint8_t> result;
 
 	for(size_t i=0; i < 2+0*compressed.size(); i++){
@@ -284,23 +278,6 @@ void test(){
 			cout << "err " << i << "    " << result[i]+0 << ":" << original[i]+0 << endl;
 		}
 	}
-
-/*	cout << "original: "; 
-	for(size_t i=0; i < original.size(); i++)
-		cout << 0+original[i] << " ";
-	cout << endl << endl;
-
-	cout << "packet: ";
-	cout << 0+compressed[1][0] << ": ";
-	for(size_t i=0; i < compressed[1].size()-2; i++){
-		cout << 0+get_nybble(compressed[1].data()+1, i*2) << " ";
-		cout << 0+get_nybble(compressed[1].data()+1, i*2+1) << "   "; 
-	}
-	cout << endl << endl;
-*/
-
-
-
 }
 
 
@@ -315,13 +292,34 @@ void test(){
 int main(int argc, char **argv)
 {
 	test();
-	if(argc != 2 && argc != 3)
+	if(argc != 4)
 	{	
 		cerr << "Please supply address.\n";
 		cerr << "Usage:\n";
-		cerr << "prog address [nonblocking]\n";
+		cerr << "prog <file> <address> <mode=raw|envelope>\n";
 		exit(1);
 	}
+	
+	
+	std::string filename = argv[1];
+
+	std::string mode = argv[3];
+	if(mode != "raw" && mode != "envelope"){
+		cerr << mode << " is not a valid mode\n";
+		exit(1);
+	}
+
+	ifstream test(filename);
+	if(test.is_open()){
+		cerr << "File  " << filename << " already exists\n";
+		exit(1);
+	}
+	ofstream output(filename);
+	if(!output.is_open()){
+		cerr << "File  " << filename << " failed: " << strerror(errno) << "\n";
+		exit(1);
+	}
+
 
 	log_level = Info;
 
@@ -337,13 +335,9 @@ int main(int argc, char **argv)
 		auto ms_since_epoch = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
 		const uint8_t* d = n.value().first;
 
-		int emg[7];
-		for(int i=0; i < 7;i++)
-		{
-		    emg[i] = 0+d[i*2+1] *256 + d[i*2];
-		    data.push_back(emg[i]);
-		}
 
+
+		int emg[7];
 
 		int seq = ((d[17] * 16777216 + d[16]*65536 +d[15] *256 + d[14])>>0);
 
@@ -352,6 +346,17 @@ int main(int argc, char **argv)
 		
 		if(volt != 0x8000)
 			v = volt / 1000.0;
+
+
+		output << "Packet " << seq << " " << v << "\n";
+		for(int i=0; i < 7;i++)
+		{
+		    emg[i] = 0+d[i*2+1] *256 + d[i*2];
+			output << "Envelope " << emg[i] << "\n";
+		    data.push_back(emg[i]);
+		}
+
+		output << flush;
 		
 		cout << setprecision(15) << seq <<  " " << v << endl;
 
@@ -371,31 +376,35 @@ int main(int argc, char **argv)
 		vector<uint8_t> res = decompress(packet);
 		copy(res.begin(), res.end(), back_inserter(data));
 
-		cout << "Sequence: " << 0+packet.back() << endl;
+		cout << "Packet " << 0+packet.back() << endl;
+		output << "Packet " << 0+packet.back() << endl;
+		for(const auto& r:res){
+			output << "voltage " << 0+r << endl;
+			data.push_back(r);
+
+		}
+
 		while(data.size() > 10000)
 			data.pop_front();
 		
 		plot.newline("line");
 		plot.addpts(data);
 		plot.draw();
+		output << flush;
 	};
 
 
-	
-
-	
-
-	std::function<void()> cb = [&gatt, &raw_notify_cb, &notify_cb](){
+	std::function<void()> cb = [&gatt, &raw_notify_cb, &notify_cb, &mode](){
 		pretty_print_tree(gatt);
 
 		for(auto& service: gatt.primary_services)
 			for(auto& characteristic: service.characteristics)
-				if(characteristic.uuid == UUID("e5f49879-6ee1-479e-bfec-3d35e13d3b88"))
+				if(characteristic.uuid == UUID("e5f49879-6ee1-479e-bfec-3d35e13d3b88") && mode == "envelope")
 				{
 					characteristic.cb_notify_or_indicate = notify_cb;
-					//characteristic.set_notify_and_indicate(true, false);
+					characteristic.set_notify_and_indicate(true, false);
 				}
-				else if(characteristic.uuid == UUID("001785a0-cf2e-47f5-9d43-1217696f8ef9"))
+				else if(characteristic.uuid == UUID("001785a0-cf2e-47f5-9d43-1217696f8ef9") && mode == "raw")
 				{
 					characteristic.cb_notify_or_indicate = raw_notify_cb;
 					characteristic.set_notify_and_indicate(true, false);
@@ -411,9 +420,8 @@ int main(int argc, char **argv)
 
 	gatt.setup_standard_scan(cb);
 
-
 	//This is how to use the blocking interface. It is very simple.
-	gatt.connect_blocking(argv[1]);
+	gatt.connect_blocking(argv[2]);
 	for(;;)
 		gatt.read_and_process_next();
 
