@@ -32,6 +32,8 @@
 #include <cerrno>
 #include <cstring>
 #include <fstream>
+
+// This is a slightly sketchy GNUPlot interface for realtime data vis from C++
 #include "cxxgplot.h"
 using namespace std;
 using namespace chrono;
@@ -41,6 +43,11 @@ using namespace BLEPP;
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
 ////////////////////////////////////////////////////////////////////////////////
+//
+// Compression algorithm from the FlexDot firmware. This is used for testing  
+// purposes only in order to verify the correctness of the decompression algorithm
+// see compress() below for the format of the packets
+//
 #define EMG_RAW_MODE_BUFFER_SIZE 20
 #include <stdint.h>
 
@@ -187,13 +194,20 @@ uint8_t compress(uint8_t v)
 	return swap;
 }
 
-
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
-////////////////////////////////////////////////////////////////////////////////
+//
+// End of the compression code
+//
 
 
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+////////////////////////////////////////////////////////////////////////////////
+//
+// Decompression algorithm below
+// 
+
+// Index an array of bytes as nybbles
 uint8_t get_nybble(const uint8_t* d, int nybble){
 	uint8_t ch = d[nybble/2];
 	uint8_t n;
@@ -204,30 +218,34 @@ uint8_t get_nybble(const uint8_t* d, int nybble){
 	return n;
 }
 
+// This function decompresses a single packet
 vector<uint8_t> decompress(const vector<uint8_t> d)
 {
 	vector<uint8_t> ret;
-	uint8_t v_0 = d[0];
+	uint8_t v_0 = d[0]; //First byte is simply the value
 	ret.push_back(v_0);
 
 	int len = d.size();
-	int nybbles = (len-2)*2;
+	int nybbles = (len-2)*2; //Exclude the first byte (no encoding) and last (sequence number)
 
 	int n_ind = 0;
 	while(n_ind < nybbles){
 		uint8_t nybble = get_nybble(d.data()+1, n_ind++);
 		uint8_t dv;
-
-		// check for end condition
+		
+		// 0xf is the flag value
 		if(nybble == 0xf){
+			// check for end condition
 			if(n_ind +3 >= nybbles)
 				break;
-
+			
+			// Otherwise the following two values encode the delta
+			// In hindsight they may as well have encoded the value.
 			uint8_t v_h = get_nybble(d.data()+1, n_ind++);
 			uint8_t v_l = get_nybble(d.data()+1, n_ind++);
 			dv = (v_h << 4) + v_l;
 		}
-		else{
+		else{ //No flag: the nybble is simply the delta (using modular arithmetic)
 			if(nybble <= 7)
 				dv = nybble;
 			else
@@ -240,6 +258,9 @@ vector<uint8_t> decompress(const vector<uint8_t> d)
 	return ret;
 }
 
+// Ad-hoc test function. This generateds data with a Cauchy distribution (mostly small)
+// and compresses it, then decompresses it and checks for agreement between the two
+// streams
 void test(){
 	mt19937 engine;
 	cauchy_distribution<> dist(128, 10);
@@ -276,6 +297,7 @@ void test(){
 	for(size_t i=0; i < result.size(); i++){
 		if(result[i] != original[i]){
 			cout << "err " << i << "    " << result[i]+0 << ":" << original[i]+0 << endl;
+			exit(1);
 		}
 	}
 }
@@ -287,7 +309,9 @@ void test(){
 
 ////////////////////////////////////////////////////////////////////////////////
 //
-// This program demonstrates the use of the library
+// This program logs data from a flexdot. Provide the output file (which it will
+// refust to overwrite), the BLE address and the capture mode. Note that raw mode
+// is very expensive in terms of battery use and lower resolution.
 // 
 int main(int argc, char **argv)
 {
@@ -327,28 +351,30 @@ int main(int argc, char **argv)
 	BLEGATTStateMachine gatt;
 
 	cplot::Plotter plot;
-	deque<int> data;
+	deque<int> data; // Ringbuffer of data to plot
 
 
 	std::function<void(const PDUNotificationOrIndication&)> notify_cb = [&](const PDUNotificationOrIndication& n)
 	{
-		auto ms_since_epoch = duration_cast<milliseconds>(system_clock::now().time_since_epoch());
+		//Callback to decode an envelope mode packet. The packet
+		//consists of 7 16 bit envelope values a 1 4 byte sequence number and a 2
+		//byte battery voltage. Battery voltage of -1 indicates no value, since it's
+		//sampled only occasionally
 		const uint8_t* d = n.value().first;
 
-
-
-		int emg[7];
-
+		// Decode the sequence number`
 		int seq = ((d[17] * 16777216 + d[16]*65536 +d[15] *256 + d[14])>>0);
-
+		
+		// Decode the voltage
 		int volt = ((0+d[19] *256 + d[18])>>0) ;
 		double v=-1;
-		
 		if(volt != 0x8000)
 			v = volt / 1000.0;
 
-
 		output << "Packet " << seq << " " << v << "\n";
+
+		// Decode the EMG signal
+		int emg[7];
 		for(int i=0; i < 7;i++)
 		{
 		    emg[i] = 0+d[i*2+1] *256 + d[i*2];
@@ -370,12 +396,14 @@ int main(int argc, char **argv)
 
 	std::function<void(const PDUNotificationOrIndication&)> raw_notify_cb = [&](const PDUNotificationOrIndication& n)
 	{
+		//Callback for a raw data packet
 		vector<uint8_t> packet;
 		copy(n.value().first, n.value().second, back_inserter(packet));
 
 		vector<uint8_t> res = decompress(packet);
 		copy(res.begin(), res.end(), back_inserter(data));
-
+		
+		// This is the sequence number
 		cout << "Packet " << 0+packet.back() << endl;
 		output << "Packet " << 0+packet.back() << endl;
 		for(const auto& r:res){
@@ -393,7 +421,9 @@ int main(int argc, char **argv)
 		output << flush;
 	};
 
-
+	
+	// BLE device scan callback: when the BLE system queries all the 
+	// features of the device, this callback is run
 	std::function<void()> cb = [&gatt, &raw_notify_cb, &notify_cb, &mode](){
 		pretty_print_tree(gatt);
 
