@@ -316,14 +316,23 @@ void test(){
 int main(int argc, char **argv)
 {
 	test();
-	if(argc != 4)
+	if(argc != 4 && argc != 5)
 	{	
 		cerr << "Please supply address.\n";
 		cerr << "Usage:\n";
-		cerr << "prog <file> <address> <mode=raw|envelope>\n";
+		cerr << "prog <file> <address> <mode=raw|envelope> [axis range]\n";
+		cerr << "Note: range is absolute for envelope and centred on 128 for raw\n";
 		exit(1);
 	}
 	
+	bool auto_scale = true;
+	int range=0;
+	if(argc == 5){
+		auto_scale = false;
+		range = stoi(argv[4]);
+
+	}
+		
 	
 	std::string filename = argv[1];
 
@@ -388,7 +397,11 @@ int main(int argc, char **argv)
 
 		while(data.size() > 1000)
 			data.pop_front();
-		
+	
+
+		if(!auto_scale){
+			plot.s() << "set yrange [0:" << range << "]\n";
+		}
 		plot.newline("line");
 		plot.addpts(data);
 		plot.draw();
@@ -415,6 +428,9 @@ int main(int argc, char **argv)
 		while(data.size() > 10000)
 			data.pop_front();
 		
+		if(!auto_scale){
+			plot.s() << "set yrange [" << 128-range << ":" << 128+range << "]\n";
+		}
 		plot.newline("line");
 		plot.addpts(data);
 		plot.draw();
