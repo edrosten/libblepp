@@ -236,7 +236,7 @@ vector<uint8_t> decompress(const vector<uint8_t> d)
 		// 0xf is the flag value
 		if(nybble == 0xf){
 			// check for end condition
-			if(n_ind +3 >= nybbles)
+			if(! ((n_ind+1) < nybbles))
 				break;
 			
 			// Otherwise the following two values encode the delta
@@ -258,6 +258,10 @@ vector<uint8_t> decompress(const vector<uint8_t> d)
 	return ret;
 }
 
+
+
+
+
 // Ad-hoc test function. This generateds data with a Cauchy distribution (mostly small)
 // and compresses it, then decompresses it and checks for agreement between the two
 // streams
@@ -266,15 +270,18 @@ void test(){
 	cauchy_distribution<> dist(128, 10);
 
 	vector<uint8_t> original;
+	vector<bool> done_p;
 	vector<vector<uint8_t>> compressed;
 
 	uint8_t seq=0;
 	
-	for(unsigned int i=0; i < 400; i++)
+	for(unsigned int i=0; i < 4000; i++)
 	{
 		uint8_t data = dist(engine);
 		uint8_t ready = compress(data);
 		original.push_back(data);
+		//cout << "Original " << uint32_t(data) << "\n";
+		done_p.push_back(ready);
 
 		if(ready)
 		{
@@ -282,24 +289,34 @@ void test(){
 			vector<uint8_t> packet;
 			int read_buf = !compressed_data.write_buf;
 			copy(begin(compressed_data.buffers[read_buf]), end(compressed_data.buffers[read_buf]), back_inserter(packet));
-			packet.push_back(seq++);
 			compressed.push_back(packet);
+
+			//cout << "Packet ";
+			//for(uint32_t d: packet)
+			//	cout << d << " ";
+			//cout << "\n";
 		}
 	}
 
-	vector<uint8_t> result;
+	vector<pair<uint8_t, int>> result;
 
-	for(size_t i=0; i < 2+0*compressed.size(); i++){
+	for(size_t i=0; i < compressed.size(); i++){
 		vector<uint8_t> d = decompress(compressed[i]);
-		copy(d.begin(), d.end(), back_inserter(result));
+		
+		for(uint8_t r: d)
+			result.emplace_back(r, i);
 	}
 
 	for(size_t i=0; i < result.size(); i++){
-		if(result[i] != original[i]){
-			cout << "err " << i << "    " << result[i]+0 << ":" << original[i]+0 << endl;
+		if(result[i].first != original[i]){
+			cerr << "err ";
+			cerr << i << "    " << "(" << result[i].second << ") " << result[i].first+0 << ":" << original[i]+0 << "   " << done_p[i] << endl;
 			exit(1);
 		}
 	}
+	
+	clog << "Tests passed.\n";
+
 }
 
 
