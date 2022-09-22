@@ -282,11 +282,11 @@ int main(int argc, char **argv)
 			}
 		}
 	}
-	catch(std::runtime_error e)
+	catch(std::runtime_error& e)
 	{
 		cerr << "Something's stopping bluetooth working: " << e.what() << endl;
 	}
-	catch(std::logic_error e)
+	catch(std::logic_error& e)
 	{
 		cerr << "Oops, someone fouled up: " << e.what() << endl;
 	}
