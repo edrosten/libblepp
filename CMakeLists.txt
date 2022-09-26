@@ -39,16 +39,20 @@ find_package(Bluez REQUIRED)
 
 include_directories(${PROJECT_SOURCE_DIR} ${BLUEZ_INCLUDE_DIRS})
 add_library(${PROJECT_NAME} SHARED ${SRC})
+
+target_link_libraries(${PROJECT_NAME} ${BLUEZ_LIBRARIES})
 set_target_properties(${PROJECT_NAME} PROPERTIES 
     CXX_STANDARD 11
     CMAKE_CXX_STANDARD_REQUIRED YES
     SOVERSION 5)
 
+
 foreach (example_src ${EXAMPLES})
     get_filename_component(example_name ${example_src} NAME_WE)
 
     add_executable(${example_name} ${example_src})
-    target_link_libraries(${example_name} ${PROJECT_NAME} ${BLUEZ_LIBRARIES})
+
+    set_target_properties(${example_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY examples)
     set_target_properties(${example_name} PROPERTIES 
         CXX_STANDARD 11
         CMAKE_CXX_STANDARD_REQUIRED YES    
