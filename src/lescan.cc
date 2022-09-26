@@ -274,7 +274,7 @@ namespace BLEPP
 		{
 			stop();
 		}
-		catch(IOError)
+		catch(IOError&)
 		{
 		}
 	}
@@ -691,7 +691,7 @@ namespace BLEPP
 
 
 			}
-			catch(out_of_range r)
+			catch(out_of_range& r)
 			{
 				LOG(LogLevels::Error, "Corrupted data sent by device " << address);
 			}
