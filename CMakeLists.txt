@@ -35,6 +35,8 @@ set(EXAMPLES
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 
+set(CMAKE_CXX_FLAGS "-Wno-unused-but-set-parameter -Wno-unused-variable -Wno-unused-parameter")
+
 find_package(Bluez REQUIRED)
 
 include_directories(${PROJECT_SOURCE_DIR} ${BLUEZ_INCLUDE_DIRS})
@@ -45,6 +47,7 @@ set_target_properties(${PROJECT_NAME} PROPERTIES
     CXX_STANDARD 11
     CMAKE_CXX_STANDARD_REQUIRED YES
     SOVERSION 5)
+
 
 
 foreach (example_src ${EXAMPLES})
