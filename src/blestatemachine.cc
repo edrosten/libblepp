@@ -191,12 +191,12 @@ namespace BLEPP
 		close_and_cleanup();
 	}
 
-	BLEGATTStateMachine::BLEGATTStateMachine()
+	BLEGATTStateMachine::BLEGATTStateMachine(size_t bufsize)
 	:dev(sock)
 	{
 		ENTER();
 		close_and_cleanup();
-		buf.resize(128);
+		buf.resize(bufsize);
 	}
 
 	void BLEGATTStateMachine::connect_blocking(const string& address)

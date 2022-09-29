@@ -329,7 +329,7 @@ namespace BLEPP
 			std::function<void(Characteristic&, const PDUReadResponse&)> cb_read;
 
 
-			BLEGATTStateMachine();
+			BLEGATTStateMachine(size_t bufsize=128);
 			~BLEGATTStateMachine();
 
 			
