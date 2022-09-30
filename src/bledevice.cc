@@ -31,8 +31,6 @@
 
 #include <unistd.h>
 
-using namespace std;
-
 namespace BLEPP
 {
 
@@ -63,7 +61,7 @@ namespace BLEPP
 	void BLEDevice::test_pdu(int len)
 	{
 		if(len == 0)
-			throw logic_error("Error constructing packet");
+			throw std::logic_error("Error constructing packet");
 	}
 
 	class Read{};
@@ -222,7 +220,7 @@ namespace BLEPP
 		return PDUResponse(buf, len);
 	}
 
-	PDUResponse BLEDevice::receive(vector<uint8_t>& v)
+	PDUResponse BLEDevice::receive(std::vector<uint8_t>& v)
 	{
 		return receive(v.data(), v.size());
 	}

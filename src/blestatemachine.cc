@@ -36,9 +36,6 @@
 #include <bluetooth/l2cap.h>
 #include <bluetooth/hci.h>
 #include <bluetooth/hci_lib.h>
-using namespace std;
-
-
 
 #define log_fd(X) log_fd_(X, __LINE__, __FILE__)
 
@@ -77,7 +74,7 @@ namespace BLEPP
 
 	const ServiceInfo* lookup_service_by_UUID(const UUID& uuid)
 	{
-		static vector<ServiceInfo> vec;
+		static std::vector<ServiceInfo> vec;
 
 		if(vec.size() == 0)
 		{
@@ -199,18 +196,18 @@ namespace BLEPP
 		buf.resize(128);
 	}
 
-	void BLEGATTStateMachine::connect_blocking(const string& address)
+	void BLEGATTStateMachine::connect_blocking(const std::string& address)
 	{
 		connect(address, true);
 	}
 
 
-	void BLEGATTStateMachine::connect_nonblocking(const string& address)
+	void BLEGATTStateMachine::connect_nonblocking(const std::string& address)
 	{
 		connect(address, false);
 	}
 
-	void BLEGATTStateMachine::connect(const string& address, bool blocking, bool pubaddr, string device)
+	void BLEGATTStateMachine::connect(const std::string& address, bool blocking, bool pubaddr, std::string device)
 	{
 		ENTER();
 
@@ -392,7 +389,7 @@ namespace BLEPP
 	void BLEGATTStateMachine::read_primary_services()
 	{
 		if(state != Idle)
-			throw logic_error("Error trying to issue command mid state");
+			throw std::logic_error("Error trying to issue command mid state");
 		state = ReadingPrimaryService;
 		next_handle_to_read=1;
 		state_machine_write();
@@ -401,7 +398,7 @@ namespace BLEPP
 	void BLEGATTStateMachine::find_all_characteristics()
 	{
 		if(state != Idle)
-			throw logic_error("Error trying to issue command mid state");
+			throw std::logic_error("Error trying to issue command mid state");
 		state = FindAllCharacteristics;
 		next_handle_to_read=1;
 		state_machine_write();
@@ -410,7 +407,7 @@ namespace BLEPP
 	void BLEGATTStateMachine::get_client_characteristic_configuration()
 	{
 		if(state != Idle)
-			throw logic_error("Error trying to issue command mid state");
+			throw std::logic_error("Error trying to issue command mid state");
 		state = GetClientCharaceristicConfiguration;
 		next_handle_to_read=1;
 		state_machine_write();
@@ -421,12 +418,12 @@ namespace BLEPP
 		LOG(Trace, "BLEGATTStateMachine::enable_indications(Characteristic&)");
 
 		if(state != Idle)
-			throw logic_error("Error trying to issue command mid state");
+			throw std::logic_error("Error trying to issue command mid state");
 		
 		if(!c.indicate && indicate)
-			throw logic_error("Error: this is not indicateable");
+			throw std::logic_error("Error: this is not indicateable");
 		if(!c.notify && notify)
-			throw logic_error("Error: this is not notifiable");
+			throw std::logic_error("Error: this is not notifiable");
 
 		//FIXME: check for CCC
 		c.ccc_last_known_value = notify | (indicate << 1);
@@ -466,7 +463,7 @@ namespace BLEPP
 	void BLEGATTStateMachine::unexpected_error(const PDUErrorResponse& r)
 	{
 		PDUErrorResponse err(r);
-		string msg = string("Received unexpected error:") + att_ecode2str(err.error_code());
+		std::string msg = std::string("Received unexpected error:") + att_ecode2str(err.error_code());
 		LOG(Error, msg);
 		fail(Disconnect(Disconnect::Reason::UnexpectedError, Disconnect::NoErrorCode));
 	}
@@ -522,7 +519,7 @@ namespace BLEPP
 		ENTER();
 		//This is always an error
 		if(state == Connecting)
-			throw logic_error("Trying to read socket while connecting");
+			throw std::logic_error("Trying to read socket while connecting");
 
 
 		if(state == Disconnected)
@@ -574,13 +571,13 @@ namespace BLEPP
 			else if(r.type() == ATT_OP_ERROR && PDUErrorResponse(r).request_opcode() != last_request)
 			{
 				PDUErrorResponse err(r);
-				std::string msg = string("Unexpected opcode in error. Expected ") + att_op2str(last_request) + " got "  + att_op2str(err.request_opcode());
+				std::string msg = std::string("Unexpected opcode in error. Expected ") + att_op2str(last_request) + " got "  + att_op2str(err.request_opcode());
 				LOG(Error, msg);
 				fail(Disconnect(Disconnect::Reason::UnexpectedError, Disconnect::NoErrorCode));
 			}
 			else if(r.type() != ATT_OP_ERROR && r.type() != last_request + 1)
 			{
-				string msg = string("Unexpected response. Expected ") + att_op2str(last_request+1) + " got "  + att_op2str(r.type());
+				std::string msg = std::string("Unexpected response. Expected ") + att_op2str(last_request+1) + " got "  + att_op2str(r.type());
 				LOG(Error, msg);
 				fail(Disconnect(Disconnect::Reason::UnexpectedResponse, Disconnect::NoErrorCode));
 			}
@@ -794,7 +791,7 @@ namespace BLEPP
 	void BLEGATTStateMachine::send_read_request(uint16_t handle)
 	{
 		if(state != Idle)
-			throw logic_error("Error trying to issue command mid state");
+			throw std::logic_error("Error trying to issue command mid state");
 		dev.send_read_request(handle);
 		read_req_handle = handle;
 		state = AwaitingReadResponse;
@@ -809,7 +806,7 @@ namespace BLEPP
 	void BLEGATTStateMachine::send_write_request(uint16_t handle, const uint8_t* data, int length)
 	{
 		if(state != Idle)
-			throw logic_error("Error trying to issue command mid state");
+			throw std::logic_error("Error trying to issue command mid state");
 		dev.send_write_request(handle, data, length);
 		state = AwaitingWriteResponse;
 		state_machine_write();
@@ -823,7 +820,7 @@ namespace BLEPP
 	void BLEGATTStateMachine::send_write_command(uint16_t handle, const uint8_t* data, int length)
 	{
 		if(state != Idle)
-			throw logic_error("Error trying to issue command mid state");
+			throw std::logic_error("Error trying to issue command mid state");
 		dev.send_write_command(handle, data, length);
 	}
 
@@ -843,53 +840,53 @@ namespace BLEPP
 	void pretty_print_tree(const BLEGATTStateMachine& s)
 	{
 
-		cout << "Primary services:\n";
+		std::cout << "Primary services:\n";
 		for(auto& service: s.primary_services)
 		{
-			cout << "Start: " << to_hex(service.start_handle);
-			cout << " End:  " << to_hex(service.end_handle);
-			cout << " UUID: " << to_str(service.uuid) << endl;
+			std::cout << "Start: " << to_hex(service.start_handle);
+			std::cout << " End:  " << to_hex(service.end_handle);
+			std::cout << " UUID: " << to_str(service.uuid) << std::endl;
 			const ServiceInfo* s = lookup_service_by_UUID(UUID::from(service.uuid));
 			if(s)
-				cout << "  " << s->id << ": " << s->name << endl;
+				std::cout << "  " << s->id << ": " << s->name << std::endl;
 			else
-				cout << "  Unknown\n";
+				std::cout << "  Unknown\n";
 
 
 			for(auto& characteristic: service.characteristics)
 			{
-				cout  << "  Characteristic: " << to_str(characteristic.uuid) << endl;
-				cout  << "   Start: " << to_hex(characteristic.first_handle) << "  End: " << to_hex(characteristic.last_handle) << endl;
+				std::cout  << "  Characteristic: " << to_str(characteristic.uuid) << std::endl;
+				std::cout  << "   Start: " << to_hex(characteristic.first_handle) << "  End: " << to_hex(characteristic.last_handle) << std::endl;
 
-				cout << "   Flags: ";
+				std::cout << "   Flags: ";
 				if(characteristic.broadcast)
-					cout << "Broadcast ";
+					std::cout << "Broadcast ";
 				if(characteristic.read)
-					cout << "Read ";
+					std::cout << "Read ";
 				if(characteristic.write_without_response)
-					cout << "Write (without response) ";
+					std::cout << "Write (without response) ";
 				if(characteristic.write)
-					cout << "Write ";
+					std::cout << "Write ";
 				if(characteristic.notify)
-					cout << "Notify ";
+					std::cout << "Notify ";
 				if(characteristic.indicate)
-					cout << "Indicate ";
+					std::cout << "Indicate ";
 				if(characteristic.authenticated_write)
-					cout << "Authenticated signed writes ";
+					std::cout << "Authenticated signed writes ";
 				if(characteristic.extended)
-					cout << "Extended properties ";
-				cout  << endl;
+					std::cout << "Extended properties ";
+				std::cout  << std::endl;
 
-				cout << "   Value at handle: " << characteristic.value_handle << endl;
+				std::cout << "   Value at handle: " << characteristic.value_handle << std::endl;
 
 				if(characteristic.client_characteric_configuration_handle != 0)
-					cout << "   CCC: (" << to_hex(characteristic.client_characteric_configuration_handle) << ") " << to_hex(characteristic.ccc_last_known_value) << endl;
+					std::cout << "   CCC: (" << to_hex(characteristic.client_characteric_configuration_handle) << ") " << to_hex(characteristic.ccc_last_known_value) << std::endl;
 
-				cout << endl;
+				std::cout << std::endl;
 
 			}
 
-			cout << endl;
+			std::cout << std::endl;
 		}
 	}
 

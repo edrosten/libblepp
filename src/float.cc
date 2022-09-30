@@ -1,8 +1,6 @@
 #include <blepp/float.h>
 #include <cmath>
 
-using namespace std;
-
 namespace BLEPP
 {
 

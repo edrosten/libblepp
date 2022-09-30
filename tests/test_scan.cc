@@ -8,26 +8,25 @@
 
 
 using namespace BLEPP;
-using namespace std;
 
 #define check(X) do{\
 if(!(X))\
 {\
-	cerr << "Test failed on line " << __LINE__ << ": " << #X << endl;\
+	std::cerr << "Test failed on line " << __LINE__ << ": " << #X << std::endl;\
 	exit(1);\
 }}while(0)
 
-vector<uint8_t> to_data(const string& ss)
+std::vector<uint8_t> to_data(const std::string& ss)
 {
-	istringstream s(ss);
+    std::istringstream s(ss);
 
 	//Format is > 04 3E ...
 
-	string tmp;
+	std::string tmp;
 	s >> tmp;
-	s>>hex;
+	s>>std::hex;
 
-	vector<uint8_t> ret;
+	std::vector<uint8_t> ret;
 
 	for(;;)
 	{
@@ -91,7 +90,7 @@ device: hci0 snap_len: 1500 filter: 0xffffffffffffffff
 	check(!r.flags);
 
 	r = HCIScanner::parse_packet(to_data("> 04 3E 17 02 01 00 01 0B 57 16 21 76 7C 0B 02 01 1A 07 FF 4C 00 10 02 0A 00 BC")).back();
-	vector<uint8_t> vendor_data_1 = {0x4c, 0x00, 0x10, 0x02, 0x0a, 0x00};
+	std::vector<uint8_t> vendor_data_1 = {0x4c, 0x00, 0x10, 0x02, 0x0a, 0x00};
 	check(r.UUIDs.size() == 0);
 	check(r.service_data.empty());
 	check(r.manufacturer_specific_data.size() == 1);
