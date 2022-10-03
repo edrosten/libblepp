@@ -8,8 +8,6 @@
 #include <cerrno>
 #include <iomanip>
 
-using namespace std;
-
 namespace BLEPP
 {
 	class Span
@@ -78,7 +76,7 @@ namespace BLEPP
 			}
 	};
 
-	AdvertisingResponse::Flags::Flags(vector<uint8_t>&& s)
+	AdvertisingResponse::Flags::Flags(std::vector<uint8_t>&& s)
 	:flag_data(s)
 	{
 		//Remove the type field
@@ -94,18 +92,18 @@ namespace BLEPP
 		}
 	}
 
-	string to_hex(const Span& s)
+	std::string to_hex(const Span& s)
 	{
 		return to_hex(s.data(), s.size());
 	}
 
-	HCIScanner::Error::Error(const string& why)
+	HCIScanner::Error::Error(const std::string& why)
 	:std::runtime_error(why)
 	{	
 		LOG(LogLevels::Error, why);	
 	}
 
-	HCIScanner::IOError::IOError(const string& why, int errno_val)
+	HCIScanner::IOError::IOError(const std::string& why, int errno_val)
 	:Error(why + ": " +   strerror(errno_val))
 	{
 	}
@@ -116,7 +114,7 @@ namespace BLEPP
 	}
 
 
-	HCIScanner::HCIScanner(bool start_scan, FilterDuplicates filtering, ScanType st, string device)
+	HCIScanner::HCIScanner(bool start_scan, FilterDuplicates filtering, ScanType st, std::string device)
 	{
 		if(filtering == FilterDuplicates::Hardware || filtering == FilterDuplicates::Both)
 			hardware_filtering = true;
@@ -294,7 +292,7 @@ namespace BLEPP
 			return false;
 	}
 
-	vector<uint8_t> HCIScanner::read_with_retry()
+	std::vector<uint8_t> HCIScanner::read_with_retry()
 	{
 		int len;
 		std::vector<uint8_t> buf(HCI_MAX_EVENT_SIZE);
@@ -314,20 +312,20 @@ namespace BLEPP
 		return buf;
 	}
 
-	vector<AdvertisingResponse> HCIScanner::get_advertisements()
+	std::vector<AdvertisingResponse> HCIScanner::get_advertisements()
 	{
-		vector<AdvertisingResponse> adverts = parse_packet(read_with_retry());
+		std::vector<AdvertisingResponse> adverts = parse_packet(read_with_retry());
 		
 		if(software_filtering)
 		{
-			vector<AdvertisingResponse> filtered;
+			std::vector<AdvertisingResponse> filtered;
 
 			for(const auto& a: adverts)
 			{
 				auto r = scanned_devices.insert(FilterEntry(a));
 
 				if(r.second)
-					filtered.emplace_back(move(a));
+					filtered.emplace_back(std::move(a));
 				else
 					LOG(Debug, "Entry " << a.address << " " << static_cast<int>(a.type) << " found already");
 			}
@@ -454,11 +452,11 @@ namespace BLEPP
 
 	*/
 
-	vector<AdvertisingResponse> parse_event_packet(Span packet);
-	vector<AdvertisingResponse> parse_le_meta_event(Span packet);
-	vector<AdvertisingResponse> parse_le_meta_event_advertisement(Span packet);
+	std::vector<AdvertisingResponse> parse_event_packet(Span packet);
+	std::vector<AdvertisingResponse> parse_le_meta_event(Span packet);
+	std::vector<AdvertisingResponse> parse_le_meta_event_advertisement(Span packet);
 
-	vector<AdvertisingResponse> HCIScanner::parse_packet(const vector<uint8_t>& p)
+	std::vector<AdvertisingResponse> HCIScanner::parse_packet(const std::vector<uint8_t>& p)
 	{
 		Span  packet(p);
 		LOG(Debug, to_hex(p));
@@ -484,7 +482,7 @@ namespace BLEPP
 		}
 	}
 
-	vector<AdvertisingResponse> parse_event_packet(Span packet)
+	std::vector<AdvertisingResponse> parse_event_packet(Span packet)
 	{
 		if(packet.size() < 2)
 			throw HCIScanner::HCIError("Truncated event packet");
@@ -498,21 +496,21 @@ namespace BLEPP
 		
 		if(event_code == EVT_LE_META_EVENT)
 		{
-			LOG(Info, "event_code = 0x" << hex << (int)event_code << ": Meta event" << dec);
+			LOG(Info, "event_code = 0x" << std::hex << (int)event_code << ": Meta event" << std::dec);
 			LOGVAR(Info, length);
 
 			return parse_le_meta_event(packet);
 		}
 		else
 		{
-			LOG(Info, "event_code = 0x" << hex << (int)event_code << dec);
+			LOG(Info, "event_code = 0x" << std::hex << (int)event_code << std::dec);
 			LOGVAR(Info, length);
 			throw HCIScanner::HCIError("Unexpected HCI event packet");
 		}
 	}
 
 
-	vector<AdvertisingResponse> parse_le_meta_event(Span packet)
+	std::vector<AdvertisingResponse> parse_le_meta_event(Span packet)
 	{
 		uint8_t subevent_code = packet.pop_front();
 
@@ -528,9 +526,9 @@ namespace BLEPP
 		}
 	}
 
-	vector<AdvertisingResponse> parse_le_meta_event_advertisement(Span packet)
+	std::vector<AdvertisingResponse> parse_le_meta_event_advertisement(Span packet)
 	{
-		vector<AdvertisingResponse> ret;
+		std::vector<AdvertisingResponse> ret;
 
 		uint8_t num_reports = packet.pop_front();
 		LOGVAR(Info, num_reports);
@@ -550,7 +548,7 @@ namespace BLEPP
 			else if(event_type == LeAdvertisingEventType::SCAN_RSP)
 				LOG(Info, "event_type = 0x04 SCAN_RSP, Scan response");
 			else
-				LOG(Warning, "event_type = 0x" << hex << (int)event_type << dec << ", unknown");
+				LOG(Warning, "event_type = 0x" << std::hex << (int)event_type << std::dec << ", unknown");
 			
 			uint8_t address_type = packet.pop_front();
 
@@ -562,11 +560,11 @@ namespace BLEPP
 				LOG(Info, "Address type = 0x" << to_hex(address_type) << ": unknown");
 
 
-			string address;
+			std::string address;
 			for(int j=0; j < 6; j++)
 			{
-				ostringstream s;
-				s << hex << setw(2) << setfill('0') << (int) packet.pop_front();
+				std::ostringstream s;
+				s << std::hex << std::setw(2) << std::setfill('0') << (int) packet.pop_front();
 				if(j != 0)
 					s << ":";
 
@@ -659,7 +657,7 @@ namespace BLEPP
 						chunk.pop_front();
 						AdvertisingResponse::Name n;
 						n.complete = type==GAP::complete_local_name;
-						n.name = string(chunk.begin(), chunk.end());
+						n.name = std::string(chunk.begin(), chunk.end());
 						rsp.local_name = n;
 
 						LOG(Info, "Name (" << (n.complete?"complete":"incomplete") << "): " << n.name);
@@ -691,7 +689,7 @@ namespace BLEPP
 
 
 			}
-			catch(out_of_range& r)
+			catch(std::out_of_range& r)
 			{
 				LOG(LogLevels::Error, "Corrupted data sent by device " << address);
 			}

@@ -23,22 +23,21 @@
 
 #include <sstream>
 #include <iomanip>
-using namespace std;
 
 namespace BLEPP
 {
 
 	std::string to_hex(const std::uint16_t& u)
 	{
-		stringstream os;
-		os << setw(4) << setfill('0') << hex << u;
+        std::stringstream os;
+		os << std::setw(4) << std::setfill('0') << std::hex << u;
 		return os.str();
 	}
 
 	std::string to_hex(const std::uint8_t& u)
 	{
-		stringstream os;
-		os << setw(2) << setfill('0') << hex << (int)u;
+        std::stringstream os;
+		os << std::setw(2) << std::setfill('0') << std::hex << (int)u;
 		return os.str();
 	}
 
@@ -71,38 +70,38 @@ namespace BLEPP
 
 	std::string to_hex(const std::uint8_t* d, int l)
 	{
-		stringstream os;
+        std::stringstream os;
 		for(int i=0; i < l; i++)
 			os << to_hex(d[i]) << " ";
 		return os.str();
 	}
-	std::string to_hex(pair<const std::uint8_t*, int> d)
+	std::string to_hex(std::pair<const std::uint8_t*, int> d)
 	{
 		return to_hex(d.first, d.second);
 	}
 
-	std::string to_hex(const vector<std::uint8_t>& v)
+	std::string to_hex(const std::vector<std::uint8_t>& v)
 	{
 		return to_hex(v.data(), v.size());
 	}
 
 	std::string to_str(const std::uint8_t* d, int l)
 	{
-		stringstream os;
+		std::stringstream os;
 		for(int i=0; i < l; i++)
 			os << to_str(d[i]);
 		return os.str();
 	}
-	std::string to_str(pair<const std::uint8_t*, int> d)
+	std::string to_str(std::pair<const std::uint8_t*, int> d)
 	{
 		return to_str(d.first, d.second);
 	}
-	std::string to_str(pair<const std::uint8_t*, const std::uint8_t*> d)
+	std::string to_str(std::pair<const std::uint8_t*, const std::uint8_t*> d)
 	{
 		return to_str(d.first, d.second - d.first);
 	}
 
-	std::string to_str(const vector<std::uint8_t>& v)
+	std::string to_str(const std::vector<std::uint8_t>& v)
 	{
 		return to_str(v.data(), v.size());
 	}
