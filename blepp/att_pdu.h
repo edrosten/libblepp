@@ -285,7 +285,7 @@ namespace BLEPP
 			{
 				type_check(ATT_OP_FIND_INFO_RESP);
 				if( (length-2) % element_size())
-					error<std::runtime_error>("Invalid packet length for PDUReadGroupByTypeResponse");
+					error<std::runtime_error>("Invalid packet length for PDUFindInformationResponse");
 			}
 
 			bool is_16_bit() const
