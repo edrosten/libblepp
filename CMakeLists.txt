@@ -3,7 +3,7 @@ project(ble++)
 set(PROJECT_VERSION "1.2")
 set(PROJECT_DESCRIPTION "Bluetooth LE interface for C++")
 
-set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD 17)
 set(TARGET1_NAME ${PROJECT_NAME} CACHE INTERNAL "")
 
 set(default_build_type "Release")
@@ -56,7 +56,7 @@ add_library(${PROJECT_NAME} SHARED ${SRC})
 
 target_link_libraries(${PROJECT_NAME} ${BLUEZ_LIBRARIES})
 set_target_properties(${PROJECT_NAME} PROPERTIES 
-    CXX_STANDARD 11
+    CXX_STANDARD 17
     CMAKE_CXX_STANDARD_REQUIRED YES
     SOVERSION 5)
 
@@ -77,7 +77,7 @@ if(WITH_EXAMPLES)
 
         set_target_properties(${example_name} PROPERTIES RUNTIME_OUTPUT_DIRECTORY examples)
         set_target_properties(${example_name} PROPERTIES
-            CXX_STANDARD 11
+            CXX_STANDARD 17
             CMAKE_CXX_STANDARD_REQUIRED YES
             RUNTIME_OUTPUT_DIRECTORY examples)
     endforeach()
