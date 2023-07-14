@@ -30,9 +30,10 @@
 #include <stdexcept>
 #include <cstdint>
 #include <set>
-#include <boost/optional.hpp>
+#include <optional>
 #include <blepp/blestatemachine.h> //for UUID. FIXME mofo
 #include <bluetooth/hci.h>
+#include <unistd.h>
 
 namespace BLEPP
 {
@@ -79,8 +80,8 @@ namespace BLEPP
 		bool uuid_32_bit_complete=0;
 		bool uuid_128_bit_complete=0;
 		
-		boost::optional<Name>  local_name;
-		boost::optional<Flags> flags;
+		std::optional<Name>  local_name;
+		std::optional<Flags> flags;
 
 		std::vector<std::vector<uint8_t>> manufacturer_specific_data;
 		std::vector<std::vector<uint8_t>> service_data;
