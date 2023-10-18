@@ -52,7 +52,7 @@ LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake/modules)
 find_package(Bluez REQUIRED)
 
 include_directories(${PROJECT_SOURCE_DIR} ${BLUEZ_INCLUDE_DIRS})
-add_library(${PROJECT_NAME} SHARED ${SRC})
+add_library(${PROJECT_NAME} ${SRC})
 
 target_link_libraries(${PROJECT_NAME} ${BLUEZ_LIBRARIES})
 set_target_properties(${PROJECT_NAME} PROPERTIES 
@@ -91,7 +91,11 @@ set(PackagingTemplatesDir "${CMAKE_CURRENT_SOURCE_DIR}/packaging")
 configure_file("${PackagingTemplatesDir}/libblepp.pc.in" ${CMAKE_CURRENT_BINARY_DIR}/libblepp.pc @ONLY)
 
 #----------------------- INSTALL --------------------------------
-install(TARGETS ${TARGET1_NAME} LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR})
+install( TARGETS ${TARGET1_NAME} 
+	LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+	ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+)
+
 install(DIRECTORY blepp DESTINATION ${CMAKE_INSTALL_INCLUDEDIR})
 install(FILES ${CMAKE_CURRENT_BINARY_DIR}/libblepp.pc DESTINATION ${CMAKE_INSTALL_LIBDIR}/pkgconfig)
 
