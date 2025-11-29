@@ -55,8 +55,6 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include <bluetooth/bluetooth.h>
-
 #include <blepp/uuid.h>
 #include <blepp/att.h>
 

@@ -26,12 +26,23 @@
 #define __BLUETOOTH_UUID_H
 
 #include <stdint.h>
+#include <cstring>
+
+// Include bluetooth.h early if BlueZ support is enabled (provides uint128_t and other types)
+#ifdef BLEPP_BLUEZ_SUPPORT
 #include <bluetooth/bluetooth.h>
+#endif
+
+// Define uint128_t ourselves only if not already defined (when BlueZ is not available)
+#if !defined(BLEPP_BLUEZ_SUPPORT) && !defined(__BLUETOOTH_H)
+typedef struct {
+	uint8_t data[16];
+} uint128_t;
+#endif
 
 namespace BLEPP
 {
 	#include <stdint.h>
-	//#include <bluetooth/bluetooth.h>
 
 	#define GENERIC_AUDIO_UUID	"00001203-0000-1000-8000-00805f9b34fb"
 

@@ -44,7 +44,55 @@
  *
  */
 
+#ifndef __INC_BLEPP_ATT_H
+#define __INC_BLEPP_ATT_H
+
 #include <blepp/uuid.h>
+#include <cstdint>
+#include <sys/types.h>
+
+// Byte order macros for Bluetooth (little-endian)
+// Only define if not already provided by bluetooth.h
+#ifndef htobs
+#ifdef __APPLE__
+#include <libkern/OSByteOrder.h>
+#define htobs(x) OSSwapHostToLittleInt16(x)
+#define btohs(x) OSSwapLittleToHostInt16(x)
+#define htobl(x) OSSwapHostToLittleInt32(x)
+#define btohl(x) OSSwapLittleToHostInt32(x)
+#else
+#include <endian.h>
+#if __BYTE_ORDER == __LITTLE_ENDIAN
+#define htobs(x) (x)
+#define btohs(x) (x)
+#define htobl(x) (x)
+#define btohl(x) (x)
+#else
+#include <byteswap.h>
+#define htobs(x) bswap_16(x)
+#define btohs(x) bswap_16(x)
+#define htobl(x) bswap_32(x)
+#define btohl(x) bswap_32(x)
+#endif
+#endif
+#endif // htobs
+
+// Unaligned access macros (replace BlueZ bt_get_unaligned/bt_put_unaligned)
+#define bt_get_unaligned(ptr)			\
+__extension__ ({				\
+	struct __attribute__((packed)) {	\
+		__typeof__(*(ptr)) __v;		\
+	} *__p = (__typeof__(__p)) (ptr);	\
+	__p->__v;				\
+})
+
+#define bt_put_unaligned(val, ptr)		\
+do {						\
+	struct __attribute__((packed)) {	\
+		__typeof__(*(ptr)) __v;		\
+	} *__p = (__typeof__(__p)) (ptr);	\
+	__p->__v = (val);			\
+} while(0)
 
 namespace BLEPP
 {
@@ -321,3 +369,5 @@ namespace BLEPP
 	uint16_t enc_exec_write_req(uint8_t flags, uint8_t *pdu, size_t len);
 	uint16_t dec_exec_write_resp(const uint8_t *pdu, size_t len);
 }
+
+#endif // __INC_BLEPP_ATT_H

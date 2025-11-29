@@ -30,9 +30,13 @@
 #include <stdexcept>
 #include <cstdint>
 #include <set>
-#include <boost/optional.hpp>
+#include <unistd.h>
 #include <blepp/blestatemachine.h> //for UUID. FIXME mofo
+#include <blepp/bleclienttransport.h>
+
+#ifdef BLEPP_BLUEZ_SUPPORT
 #include <bluetooth/hci.h>
+#endif
 
 namespace BLEPP
 {
@@ -78,141 +82,180 @@ namespace BLEPP
 		bool uuid_16_bit_complete=0;
 		bool uuid_32_bit_complete=0;
 		bool uuid_128_bit_complete=0;
-		
-		boost::optional<Name>  local_name;
-		boost::optional<Flags> flags;
+
+		Name*  local_name = nullptr;
+		Flags* flags = nullptr;
 
 		std::vector<std::vector<uint8_t>> manufacturer_specific_data;
 		std::vector<std::vector<uint8_t>> service_data;
 		std::vector<std::vector<uint8_t>> unparsed_data_with_types;
 		std::vector<std::vector<uint8_t>> raw_packet;
+
+		AdvertisingResponse() = default;
+		~AdvertisingResponse() {
+			delete local_name;
+			delete flags;
+		}
+
+		// Copy constructor
+		AdvertisingResponse(const AdvertisingResponse& other)
+			: address(other.address)
+			, type(other.type)
+			, rssi(other.rssi)
+			, UUIDs(other.UUIDs)
+			, uuid_16_bit_complete(other.uuid_16_bit_complete)
+			, uuid_32_bit_complete(other.uuid_32_bit_complete)
+			, uuid_128_bit_complete(other.uuid_128_bit_complete)
+			, local_name(other.local_name ? new Name(*other.local_name) : nullptr)
+			, flags(other.flags ? new Flags(*other.flags) : nullptr)
+			, manufacturer_specific_data(other.manufacturer_specific_data)
+			, service_data(other.service_data)
+			, unparsed_data_with_types(other.unparsed_data_with_types)
+			, raw_packet(other.raw_packet)
+		{}
+
+		// Copy assignment
+		AdvertisingResponse& operator=(const AdvertisingResponse& other) {
+			if (this != &other) {
+				address = other.address;
+				type = other.type;
+				rssi = other.rssi;
+				UUIDs = other.UUIDs;
+				uuid_16_bit_complete = other.uuid_16_bit_complete;
+				uuid_32_bit_complete = other.uuid_32_bit_complete;
+				uuid_128_bit_complete = other.uuid_128_bit_complete;
+				delete local_name;
+				local_name = other.local_name ? new Name(*other.local_name) : nullptr;
+				delete flags;
+				flags = other.flags ? new Flags(*other.flags) : nullptr;
+				manufacturer_specific_data = other.manufacturer_specific_data;
+				service_data = other.service_data;
+				unparsed_data_with_types = other.unparsed_data_with_types;
+				raw_packet = other.raw_packet;
+			}
+			return *this;
+		}
+
+		// Move constructor
+		AdvertisingResponse(AdvertisingResponse&& other) noexcept
+			: address(std::move(other.address))
+			, type(other.type)
+			, rssi(other.rssi)
+			, UUIDs(std::move(other.UUIDs))
+			, uuid_16_bit_complete(other.uuid_16_bit_complete)
+			, uuid_32_bit_complete(other.uuid_32_bit_complete)
+			, uuid_128_bit_complete(other.uuid_128_bit_complete)
+			, local_name(other.local_name)
+			, flags(other.flags)
+			, manufacturer_specific_data(std::move(other.manufacturer_specific_data))
+			, service_data(std::move(other.service_data))
+			, unparsed_data_with_types(std::move(other.unparsed_data_with_types))
+			, raw_packet(std::move(other.raw_packet))
+		{
+			other.local_name = nullptr;
+			other.flags = nullptr;
+		}
+
+		// Move assignment
+		AdvertisingResponse& operator=(AdvertisingResponse&& other) noexcept {
+			if (this != &other) {
+				address = std::move(other.address);
+				type = other.type;
+				rssi = other.rssi;
+				UUIDs = std::move(other.UUIDs);
+				uuid_16_bit_complete = other.uuid_16_bit_complete;
+				uuid_32_bit_complete = other.uuid_32_bit_complete;
+				uuid_128_bit_complete = other.uuid_128_bit_complete;
+				delete local_name;
+				local_name = other.local_name;
+				other.local_name = nullptr;
+				delete flags;
+				flags = other.flags;
+				other.flags = nullptr;
+				manufacturer_specific_data = std::move(other.manufacturer_specific_data);
+				service_data = std::move(other.service_data);
+				unparsed_data_with_types = std::move(other.unparsed_data_with_types);
+				raw_packet = std::move(other.raw_packet);
+			}
+			return *this;
+		}
 	};
 
-	/// Class for scanning for BLE devices
-	/// this must be run as root, because it requires getting packets from the HCI.
-	/// The HCI requires root since it has no permissions on setting filters, so 
-	/// anyone with an open HCI device can sniff all data.
-	class HCIScanner
+	// HCI/BLE Scanner error classes - available for all transports
+
+	/// Generic HCI scanner error exception class
+	class HCIScannerError: public std::runtime_error
 	{
-		class FD
-		{
-			private:
-				int fd=-1;
-
-			public:
-				operator int () const
-				{
-					return fd;
-				}
-				FD(int i)
-				:fd(i)
-				{
-				}
-				
-				FD()=default;
-				void set(int i)
-				{
-					fd = i;
-				}
-
-				~FD()
-				{
-					if(fd != -1)
-						close(fd);
-				}
-		};
-
-
 		public:
-		
-		enum class ScanType
-		{
-			Passive  = 0x00,
-			Active   = 0x01,
-		};
-
-		enum class FilterDuplicates
-		{
-			Off, //Get all events
-			Hardware, //Rely on hardware filtering only. Lower power draw, but can actually send
-			          //duplicates if the device's builtin list gets overwhelmed.
-			Software, //Get all events from the device and filter them by hand.
-			Both      //The best and worst of both worlds. 
-		};
-
-		///Generic error exception class
-		class Error: public std::runtime_error
-		{
-			public:
-				Error(const std::string& why);
-		};
-
-		///Thrown only if a read() is interrupted. Only bother 
-		///handling if you've got a non terminating exception handler
-		class Interrupted: public Error
-		{
-			using Error::Error;
-		};
-		
-
-		///IO error of some sort. Probably fatal for any bluetooth
-		///based system. Or might be that the dongle was unplugged.
-		class IOError: public Error
-		{
-			public:
-			IOError(const std::string& why, int errno_val);
-		};
-		
-		///HCI device spat out invalid data.
-		///This is not good. Almost certainly fatal.
-		class HCIError: public Error
-		{
-			using Error::Error;
-		};
-
-		HCIScanner();
-		HCIScanner(bool start);
-		HCIScanner(bool start, FilterDuplicates duplicates, ScanType, std::string device="");
-
-
-		void start();
-		void stop();
-		
-		///get the file descriptor.
-		///Use with select(), poll() or whatever.
-		int get_fd() const;
-		
-		~HCIScanner();
-
-		///Blocking call. Use select() on the FD if you don't want to block.
-		///This reads and parses the HCI packets.
-		std::vector<AdvertisingResponse> get_advertisements();
-		
-		///Parse an HCI advertising packet. There's probably not much
-		///reason to call this yourself.
-		static std::vector<AdvertisingResponse> parse_packet(const std::vector<uint8_t>& p);
-
-		private:
-			struct FilterEntry
-			{
-				explicit FilterEntry(const AdvertisingResponse&);
-				const std::string mac_address;
-				int type;
-				bool operator<(const FilterEntry&) const;
-			};
-
-			bool hardware_filtering;
-			bool software_filtering;
-			ScanType scan_type;
-
-			FD hci_fd;
-			bool running=0;
-			hci_filter old_filter;
-			
-			///Read the HCI data, but don't parse it.
-			std::vector<uint8_t> read_with_retry();
-			std::set<FilterEntry> scanned_devices;
+			HCIScannerError(const std::string& why);
 	};
+
+	/// HCI device spat out invalid data during parsing
+	class HCIParseError: public HCIScannerError
+	{
+		public:
+			using HCIScannerError::HCIScannerError;
+	};
+
+	/// Parse HCI advertising packet data
+	/// This is a standalone function available regardless of transport backend
+	/// It's also accessible via HCIScanner::parse_packet() for compatibility
+	/// @param p Raw HCI packet data
+	/// @return Vector of parsed advertising responses
+	/// @throws HCIParseError if packet is malformed
+	std::vector<AdvertisingResponse> parse_advertisement_packet(const std::vector<uint8_t>& p);
+
+	// Forward declaration
+	class BLEClientTransport;
+
+	/// Transport-agnostic BLE Scanner class
+	/// Works with any BLEClientTransport implementation (BlueZ, Nimble, etc.)
+	/// This is the recommended scanner class for new code.
+	class BLEScanner
+	{
+	public:
+		using FilterDuplicates = ScanParams::FilterDuplicates;
+
+		/// Constructor
+		/// @param transport Pointer to transport implementation (must outlive scanner)
+		explicit BLEScanner(BLEClientTransport* transport);
+
+		~BLEScanner();
+
+		/// Start scanning for BLE devices with custom parameters
+		/// @param params Scan parameters (interval, window, type, etc.)
+		void start(const ScanParams& params);
+
+		/// Start scanning for BLE devices (backwards compatible)
+		/// @param passive If true, use passive scanning (lower power)
+		void start(bool passive = false);
+
+		/// Stop scanning
+		void stop();
+
+		/// Get advertisements (blocking call)
+		/// @param timeout_ms Timeout in milliseconds (0 = no timeout)
+		/// @return Vector of advertising responses
+		std::vector<AdvertisingResponse> get_advertisements(int timeout_ms = 0);
+
+		/// Check if scanner is running
+		bool is_running() const { return running_; }
+
+	private:
+		struct FilterEntry
+		{
+			explicit FilterEntry(const AdvertisingResponse&);
+			const std::string mac_address;
+			int type;
+			bool operator<(const FilterEntry&) const;
+		};
+
+		BLEClientTransport* transport_;
+		bool running_;
+		FilterDuplicates filter_mode_;
+		std::set<FilterEntry> scanned_devices_;
+	};
+
 }
 
 #endif

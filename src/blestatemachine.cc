@@ -31,11 +31,15 @@
 #include <unistd.h>
 #include <sys/types.h>
 #include <sys/socket.h>
+#include <cerrno>
+#include <cstring>
 
+#ifdef BLEPP_BLUEZ_SUPPORT
 #include <bluetooth/bluetooth.h>
 #include <bluetooth/l2cap.h>
 #include <bluetooth/hci.h>
 #include <bluetooth/hci_lib.h>
+#endif
 
 #define log_fd(X) log_fd_(X, __LINE__, __FILE__)
 
@@ -157,6 +161,7 @@ namespace BLEPP
 
 	}
 
+#ifdef BLEPP_BLUEZ_SUPPORT
 	int log_l2cap_options(int sock)
 	{
 		//Read and log the socket setup.
@@ -178,9 +183,10 @@ namespace BLEPP
 		LOGVAR(Info,options.fcs);
 		LOGVAR(Info,options.max_tx);
 		LOGVAR(Info,options.txwin_size);
-		
+
 		return 0;
 	}
+#endif
 
 	BLEGATTStateMachine::~BLEGATTStateMachine()
 	{
@@ -196,6 +202,7 @@ namespace BLEPP
 		buf.resize(bufsize);
 	}
 
+#ifdef BLEPP_BLUEZ_SUPPORT
 	void BLEGATTStateMachine::connect_blocking(const std::string& address)
 	{
 		connect(address, true);
@@ -323,6 +330,7 @@ namespace BLEPP
 			throw SocketConnectFailed(strerror(errno));
 		}
 	}
+#endif // BLEPP_BLUEZ_SUPPORT
 
 
 

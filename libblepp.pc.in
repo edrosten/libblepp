@@ -1,8 +1,0 @@
-prefix=@prefix@
-includedir=@includedir@
-
-Name: libble++
-Description: Bluetooth LE interface for C++
-Version: @VERSION@
-Libs: -lble++ @LIBS@ 
-Cflags: -I${includedir}

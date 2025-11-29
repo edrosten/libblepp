@@ -25,13 +25,15 @@
 #include <vector>
 #include <stdexcept>
 #include <functional>
+#include <cstring>
 
 #include <blepp/logging.h>
 #include <blepp/bledevice.h>
 #include <blepp/att_pdu.h>
 
-
+#ifdef BLEPP_BLUEZ_SUPPORT
 #include <bluetooth/l2cap.h>
+#endif
 
 namespace BLEPP
 {
@@ -154,7 +156,18 @@ namespace BLEPP
 			type = BT_UUID16;
 			value.u16 = u;
 		}
-		
+
+		// Constructor from 128-bit UUID bytes (16 bytes)
+		UUID(const std::vector<uint8_t>& bytes)
+		{
+			if (bytes.size() == 16) {
+				type = BT_UUID128;
+				memcpy(&value.u128, bytes.data(), 16);
+			} else {
+				type = BT_UUID_UNSPEC;
+			}
+		}
+
 		UUID(){}
 
 		UUID(const UUID&) = default;
@@ -176,6 +189,19 @@ namespace BLEPP
 		bool operator==(const UUID& uuid) const
 		{
 			return bt_uuid_cmp(this, &uuid) == 0;
+		}
+
+		bool operator!=(const UUID& uuid) const
+		{
+			return bt_uuid_cmp(this, &uuid) != 0;
+		}
+
+		// Helper to convert to string
+		std::string str() const
+		{
+			char buf[MAX_LEN_UUID_STR];
+			bt_uuid_to_string(this, buf, sizeof(buf));
+			return std::string(buf);
 		}
 	};
 
@@ -282,8 +308,10 @@ namespace BLEPP
 			static const char* get_disconnect_string(Disconnect); 
 
 		private:
+#ifdef BLEPP_BLUEZ_SUPPORT
 			struct sockaddr_l2 addr;
-			
+#endif
+
 			int sock = -1;
 
 

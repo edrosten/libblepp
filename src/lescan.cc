@@ -1,12 +1,26 @@
 #include "blepp/lescan.h"
+#include "blepp/bleclienttransport.h"
 #include "blepp/pretty_printers.h"
 #include "blepp/gap.h"
 
-#include <bluetooth/hci_lib.h>
 #include <string>
 #include <cstring>
 #include <cerrno>
 #include <iomanip>
+
+#ifdef BLEPP_BLUEZ_SUPPORT
+#include <bluetooth/hci_lib.h>
+#endif
+
+// HCI packet types (standard Bluetooth HCI constants)
+#ifndef HCI_EVENT_PKT
+#define HCI_EVENT_PKT 0x04
+#endif
+
+// HCI event codes (standard Bluetooth HCI constants)
+#ifndef EVT_LE_META_EVENT
+#define EVT_LE_META_EVENT 0x3E
+#endif
 
 namespace BLEPP
 {
@@ -97,366 +111,153 @@ namespace BLEPP
 		return to_hex(s.data(), s.size());
 	}
 
-	HCIScanner::Error::Error(const std::string& why)
+	// HCI Scanner error implementation - always available
+	HCIScannerError::HCIScannerError(const std::string& why)
 	:std::runtime_error(why)
-	{	
-		LOG(LogLevels::Error, why);	
+	{
+		LOG(LogLevels::Error, why);
 	}
 
-	HCIScanner::IOError::IOError(const std::string& why, int errno_val)
-	:Error(why + ": " +   strerror(errno_val))
-	{
-	}
-		
-	HCIScanner::HCIScanner(bool start_scan)
-	:HCIScanner(start_scan, FilterDuplicates::Both, ScanType::Active)
+	// ===================================================================
+	// BLEScanner - Transport-agnostic scanner implementation
+	// ===================================================================
+
+	BLEScanner::FilterEntry::FilterEntry(const AdvertisingResponse& ad)
+	:mac_address(ad.address), type(static_cast<int>(ad.type))
 	{
 	}
 
-
-	HCIScanner::HCIScanner(bool start_scan, FilterDuplicates filtering, ScanType st, std::string device)
+	bool BLEScanner::FilterEntry::operator<(const FilterEntry& e) const
 	{
-		if(filtering == FilterDuplicates::Hardware || filtering == FilterDuplicates::Both)
-			hardware_filtering = true;
+		if(mac_address < e.mac_address)
+			return true;
+		else if(mac_address > e.mac_address)
+			return false;
 		else
-			hardware_filtering = false;
-
-		if(filtering == FilterDuplicates::Software || filtering == FilterDuplicates::Both)
-			software_filtering = true;
-		else
-			software_filtering = false;
-
-		scan_type=st;
-
-		int	dev_id = 0;
-		if (device == "") {
-			//Get a route to any(?) BTLE adapter (?)
-			dev_id = hci_get_route(NULL);
-		}
-		else {
-			dev_id = hci_devid(device.c_str());
-		}
-		if (dev_id < 0) {
-			throw HCIError("Error obtaining HCI device ID");
-		}
-		
-		//Open the device
-		//FIXME check errors
-		hci_fd.set(hci_open_dev(dev_id));
-
-		if(start_scan)
-			start();
+			return type < e.type;
 	}
 
-	HCIScanner::HCIScanner()
-	:HCIScanner(true)
+	BLEScanner::BLEScanner(BLEClientTransport* transport)
+	: transport_(transport)
+	, running_(false)
+	, filter_mode_(FilterDuplicates::Off)
 	{
-
+		if (!transport_) {
+			throw std::invalid_argument("BLEScanner: transport cannot be null");
+		}
 	}
 
-	void HCIScanner::start()
+	BLEScanner::~BLEScanner()
+	{
+		if (running_) {
+			try {
+				stop();
+			} catch (...) {
+				// Suppress exceptions in destructor
+			}
+		}
+	}
+
+	void BLEScanner::start(const ScanParams& params)
 	{
 		ENTER();
-		if(running)
-		{
+		if (running_) {
 			LOG(Trace, "Scanner is already running");
 			return;
 		}
 
-		//Cadged from the hcitool sources. No idea what
-		//these mean
-		uint16_t interval = htobs(0x0010);
-		uint16_t window = htobs(0x0010);
+		// Store the filter mode from params for use in get_advertisements()
+		filter_mode_ = params.filter_duplicates;
 
-		//Address for the adapter (I think). Use a public address.
-		//other option is random. Works either way it seems.
-		uint8_t own_type = LE_PUBLIC_ADDRESS;
-
-		//Don't use a whitelist (?)
-		uint8_t filter_policy = 0x00;
-
-		
-		//The 10,000 thing seems to be some sort of retry logic timeout
-		//thing. Number of miliseconds, but there are multiple tries
-		//where it gets reduced by 10ms each time. It's a bit odd.
-		int err = hci_le_set_scan_parameters(hci_fd, static_cast<int>(scan_type), interval, window,
-							own_type, filter_policy, 10000);
-		if(err < 0)
-		{
-			if(errno != EIO)
-				throw IOError("Setting scan parameters", errno);
-			else
-			{
-				//If the BLE device is already set to scanning, then we get an IO error. So
-				//try turning it off and trying again. This bad state would happen, if, to pick
-				//like a *totally* hypothetical example, the program segged-out during scanning
-				//and so never cleaned up properly.
-				LOG(LogLevels::Warning, "Received I/O error while setting scan parameters.");
-				LOG(LogLevels::Warning, "Switching off HCI scanner");
-				err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
-				if(err < 0)
-					throw IOError("Error disabling scan:", errno);
-
-
-				err = hci_le_set_scan_parameters(hci_fd, static_cast<int>(scan_type), interval, window, own_type, filter_policy, 10000);
-				if(err < 0)
-					throw IOError("Error disabling scan:", errno);
-				else
-					LOG(LogLevels::Warning, "Setting scan parameters worked this time.");
-
-
-			}
+		int result = transport_->start_scan(params);
+		if (result < 0) {
+			throw HCIScannerError("Failed to start scan");
 		}
 
-		LOG(LogLevels::Info, "Starting scanner");
-		scanned_devices.clear();
-
-		//Removal of duplicates done on the adapter itself
-		uint8_t filter_dup = hardware_filtering?0x01:0x00;
-		
-		
-		//Set up the filters. 
-		socklen_t olen = sizeof(old_filter);
-		if (getsockopt(hci_fd, SOL_HCI, HCI_FILTER, &old_filter, &olen) < 0) 
-			throw IOError("Getting HCI filter socket options", errno);
-
-		
-		//Magic incantations to get scan events
-		struct hci_filter nf;
-		hci_filter_clear(&nf);
-		hci_filter_set_ptype(HCI_EVENT_PKT, &nf);
-		hci_filter_set_event(EVT_LE_META_EVENT, &nf);
-		if (setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &nf, sizeof(nf)) < 0)
-			throw IOError("Setting HCI filter socket options", errno);
-
-
-		//device disable/enable duplictes ????
-		err = hci_le_set_scan_enable(hci_fd, 0x01, filter_dup, 10000);
-		if(err < 0)
-			throw IOError("Enabling scan", errno);
-
-		running=true;
+		scanned_devices_.clear();
+		running_ = true;
+		LOG(Info, "BLE scanner started");
 	}
 
-	void HCIScanner::stop()
+	void BLEScanner::start(bool passive)
+	{
+		ScanParams params;
+		params.scan_type = passive ? ScanParams::ScanType::Passive : ScanParams::ScanType::Active;
+		params.interval_ms = 500;  // 500ms for WiFi coexistence
+		params.window_ms = 150;      // 10% duty cycle (~50ms)
+		params.filter_duplicates = filter_mode_;  // Use constructor-specified filter mode
+		start(params);
+	}
+
+	void BLEScanner::stop()
 	{
 		ENTER();
-		if(!running)
-		{
+		if (!running_) {
 			return;
 		}
 
-		LOG(LogLevels::Info, "Cleaning up HCI scanner");
-		int err = hci_le_set_scan_enable(hci_fd, 0x00, 0x00, 10000);
-
-		if(err < 0)
-			throw IOError("Error disabling scan:", errno);
-
-		err = setsockopt(hci_fd, SOL_HCI, HCI_FILTER, &old_filter, sizeof(old_filter));
-
-		if(err < 0)
-			throw IOError("Error resetting HCI socket:", errno);
-
-		running = false;
-	}
-
-	int HCIScanner::get_fd() const
-	{
-		return hci_fd;
-	}
-
-		
-	HCIScanner::~HCIScanner()
-	{
-		try
-		{
-			stop();
-		}
-		catch(IOError&)
-		{
-		}
-	}
-	
-	HCIScanner::FilterEntry::FilterEntry(const AdvertisingResponse& a)
-	:mac_address(a.address),type(static_cast<int>(a.type))
-	{}
-	
-	bool HCIScanner::FilterEntry::operator<(const FilterEntry& f) const
-	{
-		//Simple lexi-sorting
-		if(mac_address < f.mac_address)
-			return true;
-		else if(mac_address == f.mac_address)
-			return type < f.type;
-		else
-			return false;
-	}
-
-	std::vector<uint8_t> HCIScanner::read_with_retry()
-	{
-		int len;
-		std::vector<uint8_t> buf(HCI_MAX_EVENT_SIZE);
-
-
-		while((len = read(hci_fd, buf.data(), buf.size())) < 0)
-		{
-			if(errno == EAGAIN)
-				continue;
-			else if(errno == EINTR)
-				throw Interrupted("interrupted reading HCI packet");
-			else
-				throw IOError("reading HCI packet", errno);
+		int result = transport_->stop_scan();
+		if (result < 0) {
+			throw HCIScannerError("Failed to stop scan");
 		}
 
-		buf.resize(len);
-		return buf;
+		running_ = false;
+		LOG(Info, "BLE scanner stopped");
 	}
 
-	std::vector<AdvertisingResponse> HCIScanner::get_advertisements()
+	std::vector<AdvertisingResponse> BLEScanner::get_advertisements(int timeout_ms)
 	{
-		std::vector<AdvertisingResponse> adverts = parse_packet(read_with_retry());
-		
-		if(software_filtering)
-		{
-			std::vector<AdvertisingResponse> filtered;
+		if (!running_) {
+			throw HCIScannerError("Scanner not running");
+		}
 
-			for(const auto& a: adverts)
-			{
-				auto r = scanned_devices.insert(FilterEntry(a));
+		// Get advertisements from transport
+		std::vector<AdvertisementData> ads;
+		int result = transport_->get_advertisements(ads, timeout_ms);
+		if (result < 0) {
+			throw HCIScannerError("Failed to get advertisements");
+		}
 
-				if(r.second)
-					filtered.emplace_back(std::move(a));
-				else
-					LOG(Debug, "Entry " << a.address << " " << static_cast<int>(a.type) << " found already");
+		// Convert AdvertisementData to AdvertisingResponse
+		std::vector<AdvertisingResponse> responses;
+		for (const auto& ad : ads) {
+			AdvertisingResponse resp;
+			resp.address = ad.address;
+			resp.type = static_cast<LeAdvertisingEventType>(ad.event_type);
+			resp.rssi = ad.rssi;
+
+			// Store raw packet data for later parsing if needed
+			// The transport's AdvertisementData.data contains the raw advertising payload
+			// Applications can parse this using parse_advertisement_packet() if needed
+			resp.raw_packet.push_back(ad.data);
+
+			// Software filtering if enabled
+			if (filter_mode_ == FilterDuplicates::Software) {
+				FilterEntry entry(resp);
+				if (scanned_devices_.count(entry)) {
+					continue;  // Skip duplicate
+				}
+				scanned_devices_.insert(entry);
 			}
 
-			return filtered;
+			responses.push_back(std::move(resp));
 		}
-		else
-			return adverts;
+
+		return responses;
 	}
 
-	/*
-	   Hello comment-reader!
 
-	   This is a class for dealing with device scanning. The scans are done
-	   using the HCI (Host Controller Interface). Interstingly, the HCI is
-	   well specified even down to the transport layer (RS232 syle, USB,
-	   SDIO and some sort of SLIP based serial). The HCI sometimes unpacks
-	   and aggregates PDUs (the data part of packets) before sending them
-	   for some reason, so you need to look in the HCI part of the spec,
-	   not the PDU part of the spec.
+	// Advertisement packet parsing - available for all transports
+	// These functions parse HCI advertisement packets and are used by
+	// BLEScanner with any transport backend (BlueZ, Nimble, etc.)
 
-	   The HCI is also semi-autonomous, and can be instructed to do things like
-	   sctive scanning (where it queries and reports additional information, 
-	   typically the device name) and filtering of duplicated advertising 
-	   events. This is great for low power draw because the host CPU doesn't need
-	   to wake up to do menial or unimportant things.
-
-	   Also, the HCI of course gives you everything! The kernel contains no 
-	   permissioned control over filtering which means anything with permissions
-	   to open the HCI can also get all data packets in both directions and
-	   therefore sniff everything. As a result, scanning normally has to be 
-	   activated by root only.
-
-	   
-	   The general HCI event format is (Bluetooth 4.0 Vol 2, Part E,  5.4.4)
-	   <packet type> <event code> <length> <crap...>
-	   
-	   Note that the HCI unpacks some of the bitfields in the advertising
-	   PDU and presents them as whole bytes.
-	   
-	   Packet type is not part of the HCI command. In USB the type is
-	   determined by the endpoint address. In all the serial protocols the
-	   packet type is 1 byte at the beginning where 
-	   
-	   Command = 0x01 Event = 0x04
-	   
-	   See, e.g. 4.0/4/A.2
-	   
-	   Linux seems to use these.
-
-	   And the LE events are all <event code> = 0x3E (HCI_LE_META_EVT) as per
-		4.0/2/E.7.7.65
-		And the format of <crap...> is:
-		<subevent code>
-		<morecrap...>
-
-	   And we're interested in advertising events, where 
-		<subevent code> = 0x02 (as per 4.0/2/E.7.7.65.2)
-	   
-		And the format of <morecrap...> in this case is
-		<num reports>
-		<report[i]...>
-	   
-		Where <report> is
-		<event type>
-		<address type>
-		<address>
-		<length>
-		<advertisment crap>
-		<RSS>
-	   
-		<advertisement crap> is an advertising packet and that's specified
-		all over the place. 4.0/3/C.8 for example. The advertising packets
-		are of the format:
-	   
-		<length0> <type0> <data0> 
-		<length1> <type1> <data1> ...
-	   
-
-	   Now, the meaning of type, and the valid data are not defined in the main
-	   spec, but in "Supplement to the Bluetooth Core Specification" version 4, 
-	   referred to here as S4. Except that  defines only the name of the types
-	   not their numeric code for some reason. Those are on the web.
-	   https://www.bluetooth.org/en-us/specification/assigned-numbers/generic-access-profile
-
-
-	   Some datatypes are not valid in advertising packets and some are also not
-	   valid in LE applications. Apart from a small selection, many of the types 
-	   are rare to the point of nonexistence. I ignore them because I've got nothing
-	   that generates tham and I wouldn't know what to do with them anyway. Feel free
-	   to fix or ping me if you need them :)
-		
-	   The ones generally of interest are:
-	   <<incomplete list of 16 bit UUIDs>>
-	   <<complete list of 16 bit UUIDs>>
-	   <<incomplete list of 128 bit UUIDs>>
-	   <<complete list of 128 bit UUIDs>>
-	   <<shortened local name>>
-	   <<complete local name>>
-	   <<flags>>
-	   <<manufacturer specific data>>
-	   <<service data>>
-		 
-	   Personal experience suggest UUIDs and flags are almost always present.
-	   Names are often present. iBeacons use manufacturer specific data whereas
-	   Eddystone beacons use service data. I've used neither. I've not personally
-	   seen or heard of any of the other types, including 32 bit UUIDs.
-
-	   There are also some moderately sensible restrictions. A device SHALL NOT
-	   report bot incomplete and complete lists of the same things in the same
-	   packet S4/1.1.1. Furthermore an ommitted UUID specification is equivalent 
-	   to a incomplete list with no elements.
-
-
-
-	   Returns 1 on success, 0  on failure - such as an inability
-	   to handle the packet, not an error.
-	   
-	   Return code can probably be ignored because
-	   it will call lambdas on specific packets anyway.
-	   
-	   TODO: replace some errors with throw.
-	   such as the HCI device spewing crap.
-
-	*/
-
+	// Forward declarations for internal parsing functions
 	std::vector<AdvertisingResponse> parse_event_packet(Span packet);
 	std::vector<AdvertisingResponse> parse_le_meta_event(Span packet);
 	std::vector<AdvertisingResponse> parse_le_meta_event_advertisement(Span packet);
 
-	std::vector<AdvertisingResponse> HCIScanner::parse_packet(const std::vector<uint8_t>& p)
+	// Standalone function
+	std::vector<AdvertisingResponse> parse_advertisement_packet(const std::vector<uint8_t>& p)
 	{
 		Span  packet(p);
 		LOG(Debug, to_hex(p));
@@ -478,22 +279,22 @@ namespace BLEPP
 		else
 		{
 			LOG(LogLevels::Error, "Unknown HCI packet received");
-			throw HCIError("Unknown HCI packet received");
+			throw HCIParseError("Unknown HCI packet received");
 		}
 	}
 
 	std::vector<AdvertisingResponse> parse_event_packet(Span packet)
 	{
 		if(packet.size() < 2)
-			throw HCIScanner::HCIError("Truncated event packet");
-		
+			throw HCIParseError("Truncated event packet");
+
 		uint8_t event_code = packet.pop_front();
 		uint8_t length = packet.pop_front();
 
-		
+
 		if(packet.size() != length)
-			throw HCIScanner::HCIError("Bad packet length");
-		
+			throw HCIParseError("Bad packet length");
+
 		if(event_code == EVT_LE_META_EVENT)
 		{
 			LOG(Info, "event_code = 0x" << std::hex << (int)event_code << ": Meta event" << std::dec);
@@ -505,7 +306,7 @@ namespace BLEPP
 		{
 			LOG(Info, "event_code = 0x" << std::hex << (int)event_code << std::dec);
 			LOGVAR(Info, length);
-			throw HCIScanner::HCIError("Unexpected HCI event packet");
+			throw HCIParseError("Unexpected HCI event packet");
 		}
 	}
 
@@ -614,7 +415,7 @@ namespace BLEPP
 
 					if(type == GAP::flags)
 					{
-						rsp.flags = AdvertisingResponse::Flags({chunk.begin(), chunk.end()});
+						rsp.flags = new AdvertisingResponse::Flags({chunk.begin(), chunk.end()});
 
 						LOG(Info, "Flags = " << to_hex(rsp.flags->flag_data));
 
@@ -655,12 +456,12 @@ namespace BLEPP
 					else if(type == GAP::shortened_local_name || type == GAP::complete_local_name)
 					{
 						chunk.pop_front();
-						AdvertisingResponse::Name n;
-						n.complete = type==GAP::complete_local_name;
-						n.name = std::string(chunk.begin(), chunk.end());
+						AdvertisingResponse::Name* n = new AdvertisingResponse::Name();
+						n->complete = type==GAP::complete_local_name;
+						n->name = std::string(chunk.begin(), chunk.end());
 						rsp.local_name = n;
 
-						LOG(Info, "Name (" << (n.complete?"complete":"incomplete") << "): " << n.name);
+						LOG(Info, "Name (" << (n->complete?"complete":"incomplete") << "): " << n->name);
 					}
 					else if(type == GAP::manufacturer_data)
 					{
@@ -698,5 +499,4 @@ namespace BLEPP
 		return ret;
 	}
 
-
-}
+} // namespace BLEPP

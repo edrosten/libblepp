@@ -23,13 +23,10 @@
 #include "blepp/logging.h"
 #include "blepp/att_pdu.h"
 
-
-#include <bluetooth/bluetooth.h>
-#include <bluetooth/l2cap.h>
-
 #include <sys/socket.h>
-
 #include <unistd.h>
+#include <cerrno>
+#include <cstring>
 
 namespace BLEPP
 {

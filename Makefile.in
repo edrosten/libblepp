@@ -9,6 +9,13 @@ srcdir = @srcdir@
 libdir=@libdir@
 LOADLIBES = @LIBS@
 
+# Transport support flags from configure
+BLEPP_BLUEZ_SUPPORT = @BLEPP_BLUEZ_SUPPORT@
+BLEPP_NIMBLE_SUPPORT = @BLEPP_NIMBLE_SUPPORT@
+BLEPP_SERVER_SUPPORT = @BLEPP_SERVER_SUPPORT@
+NIMBLE_ROOT = @NIMBLE_ROOT@
+NIMBLE_LIBDIR = @NIMBLE_LIBDIR@
+
 vpath %.cc $(srcdir)
 
 ifneq "$(DESTDIR)" ""
@@ -16,7 +23,7 @@ DESTDIR+=/
 endif
 
 CXX=@CXX@
-LD=@CXX@
+LD=@LD@
 CXXFLAGS=@CXXFLAGS@ -I$(srcdir)
 LDFLAGS=@LDFLAGS@
 
@@ -29,9 +36,71 @@ soname1=libble++.so.0
 soname2=libble++.so.0.5
 set_soname=-Wl,-soname,libble++.so.0
 
-LIBOBJS=src/att.o src/uuid.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o src/logging.o src/lescan.o
+# Core library objects (always compiled)
+# lescan.o contains parse_advertisement_packet() which is transport-agnostic
+LIBOBJS=src/att.o src/uuid.o src/bledevice.o src/att_pdu.o src/pretty_printers.o src/blestatemachine.o src/float.o src/logging.o src/lescan.o src/bleclienttransport.o
 
-PROGS=examples/lescan examples/blelogger examples/bluetooth examples/lescan_simple examples/temperature examples/read_device_name examples/write
+# Validate: require at least one transport (configure already checks this, but keep for manual builds)
+ifeq ($(strip $(BLEPP_BLUEZ_SUPPORT)),)
+ifeq ($(strip $(BLEPP_NIMBLE_SUPPORT)),)
+$(error At least one of BLEPP_BLUEZ_SUPPORT or BLEPP_NIMBLE_SUPPORT must be defined)
+endif
+endif
+
+# BlueZ transport support (client + optional server)
+ifneq ($(strip $(BLEPP_BLUEZ_SUPPORT)),)
+LIBOBJS+=src/bluez_client_transport.o
+CXXFLAGS+=-DBLEPP_BLUEZ_SUPPORT
+endif
+
+# Nimble transport support (client + optional server)
+ifneq ($(strip $(BLEPP_NIMBLE_SUPPORT)),)
+LIBOBJS+=src/nimble_client_transport.o
+CXXFLAGS+=-DBLEPP_NIMBLE_SUPPORT
+CXXFLAGS+=-DCONFIG_LINUX_BLE_STACK_APP=1
+
+# Add Nimble include directories (NIMBLE_ROOT set by configure)
+ifneq ($(strip $(NIMBLE_ROOT)),)
+CXXFLAGS+=-I$(NIMBLE_ROOT)/nimble/include \
+    -I$(NIMBLE_ROOT)/nimble/host/include \
+    -I$(NIMBLE_ROOT)/nimble/host/services/gap/include \
+    -I$(NIMBLE_ROOT)/nimble/host/services/gatt/include \
+    -I$(NIMBLE_ROOT)/nimble/host/util/include \
+    -I$(NIMBLE_ROOT)/porting/nimble/include \
+    -I$(NIMBLE_ROOT)/ext/tinycrypt/include
+endif
+
+# Link Nimble library (NIMBLE_LIBDIR set by configure)
+ifneq ($(strip $(NIMBLE_LIBDIR)),)
+LDFLAGS+=-L$(NIMBLE_LIBDIR) -Wl,-rpath,$(NIMBLE_LIBDIR)
+LOADLIBES+=-lnimble
+endif
+endif
+
+# Server support objects
+ifneq ($(strip $(BLEPP_SERVER_SUPPORT)),)
+LIBOBJS+=src/bleattributedb.o src/blegattserver.o
+CXXFLAGS+=-DBLEPP_SERVER_SUPPORT
+
+# BlueZ server transport (only if BlueZ support enabled)
+ifneq ($(strip $(BLEPP_BLUEZ_SUPPORT)),)
+LIBOBJS+=src/bluez_transport.o
+endif
+
+# Nimble server transport (only if Nimble support enabled)
+ifneq ($(strip $(BLEPP_NIMBLE_SUPPORT)),)
+LIBOBJS+=src/nimble_transport.o
+endif
+
+endif
+
+# Core examples that work with any transport
+PROGS=examples/lescan_transport
+
+# BlueZ-specific examples (use BLEGATTStateMachine::connect_blocking)
+ifneq ($(strip $(BLEPP_BLUEZ_SUPPORT)),)
+PROGS+=examples/lescan_simple examples/blelogger examples/bluetooth examples/temperature examples/read_device_name examples/write
+endif
 
 .PHONY: all clean testclean install lib progs test doc install-so install-a install-hdr install-pkgconfig
 
@@ -97,8 +166,17 @@ docs:
 
 
 #Every .cc file in the tests directory is a test
-TESTS=$(notdir $(basename $(wildcard $(srcdir)/tests/*.cc)))
+# Transport-agnostic tests (work with any transport)
+CORE_TESTS=test_transport test_scan
 
+# BlueZ-specific tests (use HCIScanner hardware interface)
+BLUEZ_TESTS=
+
+# Combine tests based on what's enabled
+TESTS=$(CORE_TESTS)
+ifneq ($(strip $(BLEPP_BLUEZ_SUPPORT)),)
+TESTS+=$(BLUEZ_TESTS)
+endif
 
 #Get the intermediate file names from the list of tests.
 TEST_RESULT=$(TESTS:%=tests/%.result)
@@ -110,11 +188,11 @@ TEST_RESULT=$(TESTS:%=tests/%.result)
 
 test:tests/results
 
-#We don't want this file hanging around on failure since we 
+#We don't want this file hanging around on failure since we
 #want the build depend on it. If we leave it behing then typing make
 #twice in a row will suceed, since make will find the file and not try
 #to rebuild it.
-.DELETE_ON_ERROR: tests/results 
+.DELETE_ON_ERROR: tests/results
 
 tests/results:$(TEST_RESULT)
 	cat $(TEST_RESULT) > tests/results

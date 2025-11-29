@@ -6,7 +6,6 @@
 #include <algorithm>
 #include <cstdlib>
 
-
 using namespace BLEPP;
 
 #define check(X) do{\
@@ -57,7 +56,7 @@ device: hci0 snap_len: 1500 filter: 0xffffffffffffffff
 > 04 0E 04 01 0C 20 00 
 */	
 
-	AdvertisingResponse r = HCIScanner::parse_packet(to_data("> 04 3E 21 02 01 00 00 1B EE B5 80 07 00 15 02 01 06 11 06 64 97 81 D1 ED BA 6B AC 11 4C 9D 34 3E 20 09 73 BC")).back();
+	AdvertisingResponse r = parse_advertisement_packet(to_data("> 04 3E 21 02 01 00 00 1B EE B5 80 07 00 15 02 01 06 11 06 64 97 81 D1 ED BA 6B AC 11 4C 9D 34 3E 20 09 73 BC")).back();
 	check(r.UUIDs[0] == UUID("7309203e-349d-4c11-ac6b-baedd1819764"));
 	check(r.UUIDs.size() == 1);
 	check(r.service_data.empty());
@@ -76,7 +75,7 @@ device: hci0 snap_len: 1500 filter: 0xffffffffffffffff
 	check(!r.flags->simultaneous_LE_BR_host);
 
 
-	r = HCIScanner::parse_packet(to_data("> 04 3E 24 02 01 04 00 1B EE B5 80 07 00 18 17 09 44 79 6E 6F 66 69 74 20 49 6E 63 20 44 4F 54 53 20 78 78 78 78 31 BE")).back();
+	r = parse_advertisement_packet(to_data("> 04 3E 24 02 01 04 00 1B EE B5 80 07 00 18 17 09 44 79 6E 6F 66 69 74 20 49 6E 63 20 44 4F 54 53 20 78 78 78 78 31 BE")).back();
 	check(r.UUIDs.size() == 0);
 	check(r.service_data.empty());
 	check(r.manufacturer_specific_data.empty());
@@ -89,7 +88,7 @@ device: hci0 snap_len: 1500 filter: 0xffffffffffffffff
 	check(!r.uuid_128_bit_complete);
 	check(!r.flags);
 
-	r = HCIScanner::parse_packet(to_data("> 04 3E 17 02 01 00 01 0B 57 16 21 76 7C 0B 02 01 1A 07 FF 4C 00 10 02 0A 00 BC")).back();
+	r = parse_advertisement_packet(to_data("> 04 3E 17 02 01 00 01 0B 57 16 21 76 7C 0B 02 01 1A 07 FF 4C 00 10 02 0A 00 BC")).back();
 	std::vector<uint8_t> vendor_data_1 = {0x4c, 0x00, 0x10, 0x02, 0x0a, 0x00};
 	check(r.UUIDs.size() == 0);
 	check(r.service_data.empty());
@@ -105,4 +104,6 @@ device: hci0 snap_len: 1500 filter: 0xffffffffffffffff
 	check(r.flags->simultaneous_LE_BR_controller);
 	check(r.flags->simultaneous_LE_BR_host);
 
+	std::cout << "OK" << std::endl;
+	return 0;
 }

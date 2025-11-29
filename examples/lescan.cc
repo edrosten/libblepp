@@ -9,7 +9,6 @@
 #include <array>
 #include <iomanip>
 #include <vector>
-#include <boost/optional.hpp>
 
 #include <signal.h>
 
